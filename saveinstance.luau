@@ -2088,8 +2088,14 @@ end
 
 local function RunDecompilePrepass(ldeccache, O, report)
 	local HttpRequest = request or http_request
-	if not (getscriptbytecode and HttpRequest and sha384 and base64encode) then
-		return false, "needs getscriptbytecode + request/http_request"
+	-- Prefer the executor's OWN decompiler if it has one (Volt now ships one) - no external API,
+	-- no rate limit, no lua.expert. Fall back to lua.expert only when there is no native decompiler.
+	local nativeDecompile = decompile or (getgenv and getgenv().decompile)
+	if not (getscriptbytecode and sha384) then
+		return false, "needs getscriptbytecode + a hash function"
+	end
+	if not nativeDecompile and not (HttpRequest and base64encode) then
+		return false, "needs a native decompiler, or request/http_request for the lua.expert fallback"
 	end
 
 	local apiUrl = O.PrepassApiUrl or "https://api.lua.expert/decompile"
@@ -2123,7 +2129,7 @@ local function RunDecompilePrepass(ldeccache, O, report)
 			seen[bc] = true
 			local key = sha384(bc)
 			if ldeccache[key] == nil then
-				jobs[#jobs + 1] = { bc = bc, key = key }
+				jobs[#jobs + 1] = { script = o, bc = (nativeDecompile and nil) or bc, key = key }
 				if maxScripts > 0 and #jobs > maxScripts then
 					overCap = true
 				end
@@ -2184,7 +2190,16 @@ local function RunDecompilePrepass(ldeccache, O, report)
 					end
 					-- Workers ONLY do the HTTP decompile (getscriptbytecode + dedup already happened serially
 					-- in the gather). No concurrent getscriptbytecode = stable on huge games.
-					local body = decompile_via_api(job.bc, apiUrl, rateGap)
+					local body
+						if nativeDecompile then
+							-- the executor's own decompiler (Volt etc.) - no external API. Synchronous/CPU-heavy,
+							-- so yield every few scripts so it does not freeze.
+							local okd, r = pcall(nativeDecompile, job.script)
+							if okd and type(r) == "string" then body = r end
+							if nextIndex % 8 == 0 then task.wait() end
+						else
+							body = decompile_via_api(job.bc, apiUrl, rateGap)
+						end
 					if body and body ~= "" then
 						ldeccache[job.key] = (string.gsub(body, "\0", "\\0"))
 					end
