@@ -36,7 +36,7 @@ synsaveinstance({
 
 That's it — one call, no extra scripts. Every option is off by default; flip on what you want.
 
-📖 **Full option list:** https://realslimshady2000.github.io/SaveInstance420Edition/
+📖 **Full option list:** https://pages.sirmemegithub.com/SaveInstance420Edition/
 
 ## Credits
 
