@@ -44,3 +44,9 @@ Built on the original **[UniversalSynSaveInstance](https://luau.github.io/)** by
 Streaming & prepass ideas by [centerepic](https://github.com/centerepic). Decompiler by [lua.expert](https://lua.expert).
 
 Modified by **Robloxscripts.com** — Discord: discord.robloxscripts.com
+
+<!-- sirmeme-watermark -->
+
+---
+<sub>⭐ <b>Official source:</b> <a href="https://sirmemegithub.com/RealSlimShady2000/saveinstance420edition">sirmemegithub.com/RealSlimShady2000/saveinstance420edition</a> &nbsp;·&nbsp; built &amp; maintained by <b>SirMeme</b>. Got this somewhere else? Grab the latest, verified version at the link above.</sub>
+<!-- /sirmeme-watermark -->
