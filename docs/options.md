@@ -17,12 +17,50 @@ synsaveinstance({
 
 ## Most common
 
+### Which decompiler is used? Does Oracle work?
+
+SaveInstance first uses the installed `decompile()` function. This is often the executor's
+own decompiler, but a custom loader can replace it. Oracle works through this hook: run
+your configured Oracle loader before SaveInstance. SaveInstance does not include an
+Oracle subscription or key, and it does not choose Oracle simply from its name.
+
+When no `decompile()` function exists, SaveInstance uses the lua.expert HTTP fallback
+if bytecode, Base64, and HTTP request functions are available. A failed installed
+decompiler does not automatically switch to lua.expert. `DecompilePrepass=false`
+disables the prepass, not ordinary script decompilation.
+
+The save status and console show the selected backend. Each saved script includes:
+
+```lua
+-- Saved by USSI modded by Robloxscripts.com (Join the Discord) discord.robloxscripts.com
+-- Decompiler used: Oracle
+```
+
+For a custom loader, register its name immediately after installing the function:
+
+```lua
+getgenv().__SaveInstanceDecompiler = {
+    Name = "Oracle",
+    Function = getgenv().decompile,
+}
+```
+
+Registration only applies while that exact function remains installed. Alternatively,
+pass `DecompilerName = "Oracle"` to label your configured hook for one save. This option
+is a display label, not a provider selector. Unregistered hooks are identified as
+`Executor decompile() (executor name)` because their internal provider cannot be inferred.
+
+Known cached results preserve their recorded backend, such as `Oracle (cached)`.
+Older cache entries without provenance say `Unknown (legacy cache)`. Disabled, ignored,
+empty, provided, original linked, or inaccessible server-only source is labelled separately.
+
 | Option | Default | What it does |
 |---|---|---|
 | `mode` | `"optimized"` | `"full"`, `"optimized"`, or `"scripts"`. `"optimized"` is smallest; use `"full"` for maximum fidelity. |
 | `noscripts` | `false` | Skip decompiling — save the map & structure only (scripts kept as empty instances). |
 | `SafeMode` | `false` | Kicks you from the game right before saving (anti-detection). |
 | `ShowStatus` | `true` | Show the on-screen progress bar. |
+| `DecompilerName` | *(auto)* | Display label for the installed `decompile()` hook; does not change providers. |
 | `Debug` | `false` | Write `saveinstance-debug.txt` (executor, capabilities, stats) — send it for troubleshooting. |
 | `FilePath` | *(auto)* | Output file name (no extension). Defaults to `place <id> <name>`. |
 | `Callback` | `false` | Receive the serialized string in a function instead of writing a file. |
