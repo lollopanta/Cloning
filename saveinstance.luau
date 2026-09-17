@@ -4,8 +4,8 @@
 --!optimize 2
 --!divine-intellect
 -- discord.robloxscripts.com
--- SaveInstance 420 Edition | https://github.com/RealSlimShady2000/SaveInstance420Edition
--- Docs: https://realslimshady2000.github.io/SaveInstance420Edition/
+-- SaveInstance 420 Edition | https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition
+-- Docs: https://pages.sirmemegithub.com/SaveInstance420Edition/
 
 local realcheck = true
 local imagonnaaddmorecheck, _ = pcall(function()
@@ -16,34 +16,10 @@ if not imagonnaaddmorecheck then
 	realcheck = false
 end
 
-local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 local table = table
 local string = string
 local math = math
 local tonumber = tonumber
-local function to_base64(data)
-	local result, bit_table = {}, {}
-	for i = 1, #data do
-		local byte = data:byte(i)
-		local bits = {}
-		for j = 7, 0, -1 do
-			bits[#bits + 1] = (math.floor(byte / (2 ^ j)) % 2 == 1) and '1' or '0'
-		end
-		bit_table[#bit_table + 1] = table.concat(bits)
-	end
-
-	local bit_string = table.concat(bit_table)
-	bit_string = bit_string .. string.rep('0', (6 - #bit_string % 6) % 6)
-
-	for i = 1, #bit_string, 6 do
-		local chunk = bit_string:sub(i, i + 5)
-		local index = tonumber(chunk, 2) + 1
-		result[#result + 1] = b:sub(index, index)
-	end
-
-	local padding = (#data % 3 == 1 and '==') or (#data % 3 == 2 and '=' or '')
-	return table.concat(result) .. padding
-end
 
 if gethiddenproperty and realcheck then
 	getgenv().gethiddenpropertygethiddenproperty = gethiddenproperty
@@ -1800,8 +1776,9 @@ local GLOBAL_ENV = getgenv and getgenv() or _G or shared
 --- @field NeutralizeLighting boolean -- * Reset `Lighting` (ClockTime/Fog/Ambient), `Atmosphere`, post-effects (ColorCorrection/Bloom/Blur/SunRays/DoF) and clouds to clean midday right before saving, so the place opens BRIGHT instead of inheriting the game's dark/foggy/night atmosphere (the "all grey on the camera" look). `false` keeps the game's real lighting. ___Default:___ false
 --- @field ExportObj boolean -- * Also write a world-space `.obj` of all MeshPart geometry next to the save. Geometry is recovered with `AssetService:CreateEditableMeshAsync`, which works even for PRIVATE game meshes that Studio can't re-download (those save as grey boxes). The `.obj` (with per-part vertex colors) opens in Blender or Studio's 3D importer. MeshParts can't be made to render inside the place file itself, so this is the only way to recover their visuals. Best paired with `SetStreaming` (load the whole map first). World-space baking duplicates reused meshes, so big maps produce large files. ___Default:___ false
 --- @field Debug boolean -- * Writes a detailed run log to `saveinstance-debug.txt` in the executor workspace (executor, capabilities, options, streaming/prepass/decompile stats, save result). Share it for diagnosis. ___Default:___ false
---- @field DecompilePrepass boolean -- * **RISKY:** Before saving, decompiles every client script in parallel via an external API (`api.lua.expert`) and pre-fills the decompile cache, so the save's decompile step is near-instant. Big speedup on script-heavy games. Sends script bytecode to a third-party API; needs `getscriptbytecode` + an HTTP request function. ___Default:___ false
---- @field PrepassConcurrency number -- * Parallel decompile requests kept in flight during the prepass. ___Default:___ 24
+--- @field DecompilePrepass boolean -- Pre-decompile eligible exported scripts through the selected provider with bounded concurrency. Providers such as Oracle and lua.expert send bytecode remotely. ___Default:___ false
+--- @field PrepassConcurrency number -- * Parallel decompile requests kept in flight during the prepass. ___Default:___ 4 (maximum 8)
+--- @field PrepassMaxTime number -- Overall prepass worker deadline in seconds. Aborted jobs are not replaced by on-demand calls. ___Default:___ 300
 --- @field PrepassRateGap number -- * Minimum seconds between decompile-API requests (lua.expert rejects unthrottled bursts). Lower = faster if the API allows. ___Default:___ 0.12
 --- @field PrepassApiUrl string -- * Endpoint used by the decompile prepass. ___Default:___ "https://api.lua.expert/decompile"
 --- @field PrepassMaxScripts number -- * Upper bound for `DecompilePrepass`. If the game has more than this many client scripts, the prepass is skipped and scripts decompile on-demand during the save instead. The gather is cheap, the workers are throttled (reading thousands of scripts' bytecode no longer bursts/crashes), and decompiles are API-rate-limited, so this just avoids an absurdly long prepass on games so large the prepass would risk destabilizing an already memory-heavy client (e.g. Grow a Garden 2 with 25k+ scripts); those fall back to the stable on-demand decompile. ___Default:___ 6000
@@ -2079,8 +2056,7 @@ local function decompile_via_api(bc, apiUrl, min_gap)
 	})
 	if not ok or type(res) ~= "table" or res.StatusCode ~= 200 then
 		_api_fail += 1
-		local detail = ok and ("HTTP " .. tostring(res and res.StatusCode) .. " — " .. tostring(res and res.Body))
-			or ("error: " .. tostring(res))
+		local detail = ok and type(res) == "table" and ("HTTP " .. tostring(res.StatusCode)) or "request failed"
 		_api_first_fail = _api_first_fail or detail
 		if not _api_warned then -- log the FIRST failure (status/body) so the reason is visible, without spamming
 			_api_warned = true
@@ -2141,145 +2117,306 @@ local function savedSourceHeader(source, backend)
 end
 -- END DECOMPILER PROVENANCE
 
-local function RunDecompilePrepass(ldeccache, O, report, nativeDecompile, backendName)
-	local HttpRequest = request or http_request
-	-- Prefer the executor's OWN decompiler if it has one (Volt now ships one) - no external API,
-	-- no rate limit, no lua.expert. Fall back to lua.expert only when there is no native decompiler.
-	if not (getscriptbytecode and sha384) then
-		return false, "needs getscriptbytecode + a hash function"
-	end
-	if not nativeDecompile and not (HttpRequest and base64encode) then
-		return false, "needs a native decompiler, or request/http_request for the lua.expert fallback"
-	end
+-- BEGIN DECOMPILE WORKER POOL
+-- Cooperative concurrency: invoke runs directly in its worker, so a timed-out
+-- native call never releases a slot to start another call. Callbacks must not yield.
+local function RunDecompileJobs(jobs, options, invoke, onComplete, onProgress)
+    options = options or {}
+    local function finite(value)
+        return type(value) == "number" and value == value and math.abs(value) < math.huge
+    end
+    local concurrency = options.concurrency == nil and 4 or options.concurrency
+    assert(finite(concurrency) and concurrency >= 1, "concurrency must be finite and at least 1")
+    concurrency = math.min(8, math.floor(concurrency))
+    local timeout = options.timeout == nil and 10 or options.timeout
+    assert(finite(timeout) and (timeout > 0 or timeout == -1), "timeout must be positive and finite, or -1")
+    local maxTime = options.maxTime == nil and 300 or options.maxTime
+    assert(finite(maxTime) and maxTime > 0, "maxTime must be positive and finite")
+    assert(type(invoke) == "function", "invoke must be a function")
+    assert(onComplete == nil or type(onComplete) == "function", "onComplete must be a function")
+    assert(onProgress == nil or type(onProgress) == "function", "onProgress must be a function")
+    assert(options.abortOnError == nil or type(options.abortOnError) == "function", "abortOnError must be a function")
 
-	local apiUrl = O.PrepassApiUrl or "https://api.lua.expert/decompile"
-	local concurrency = math.max(1, tonumber(O.PrepassConcurrency) or 24)
-	local rateGap = tonumber(O.PrepassRateGap) or 0.12
+    local started = os.clock()
+    local total = #jobs
+    local stats = {
+        total = total, concurrency = concurrency, attempted = 0, completed = 0,
+        succeeded = 0, failed = 0, timedOut = 0, aborted = false,
+        elapsed = 0, maxActive = 0, results = {}, callbackErrors = {},
+    }
+    for index = 1, total do
+        stats.results[index] = { status = "not_started", index = index }
+    end
+    local active, threads = {}, {}
+    local activeCount, nextIndex = 0, 1
+    local closed = false
+    local lastProgress = -math.huge
 
-	-- Gather unique client scripts (skip server scripts we can't read; dedupe by bytecode hash)
-	-- Safety cap: pre-decompiling every script in a HUGE game (e.g. Grow a Garden 2) OOM-crashes the
-	-- client. If there are more than this many unique scripts, skip the prepass and let them decompile
-	-- on-demand during the save (incremental, far lighter). Raise PrepassMaxScripts to override.
-	local maxScripts = math.max(0, tonumber(O.PrepassMaxScripts) or 2500)
-	local seen, jobs, overCap = {}, {}, false
-	local function consider(o)
-		local okIsA, isLSC = pcall(function()
-			return o:IsA("LuaSourceContainer")
-		end)
-		if not (okIsA and isLSC) then
+    local function abort(reason, now)
+        if closed then return end
+        closed = true
+        stats.aborted, stats.reason = true, reason
+        for index, record in pairs(active) do
+            local expired = timeout ~= -1 and now - record.started >= timeout
+            record.status = expired and "timed_out" or "cancelled"
+            record.error = expired and "decompiler timeout" or reason
+            record.finished, record.elapsed = now, now - record.started
+            if expired then stats.timedOut += 1 end
+            active[index] = nil
+        end
+        activeCount = 0
+    end
+
+    local function checkDeadline(now)
+        if now - started >= maxTime then
+            abort("max_time", now)
+        elseif timeout ~= -1 then
+            for _, record in pairs(active) do
+                if now - record.started >= timeout then
+                    abort("job_timeout", now)
+                    break
+                end
+            end
+        end
+        return closed
+    end
+
+    local function progress(now)
+        if not onProgress or now - lastProgress < 0.1 then return end
+        lastProgress = now
+        local currentJobs, currentScripts = {}, {}
+        for index, record in pairs(active) do
+            currentJobs[#currentJobs + 1] = { index = index, job = jobs[index], elapsed = now - record.started }
+        end
+        table.sort(currentJobs, function(a, b) return a.index < b.index end)
+        for _, entry in ipairs(currentJobs) do
+            local job = entry.job
+            currentScripts[#currentScripts + 1] = type(job) == "table"
+                and tostring(job.name or job.Name or job.path or job) or tostring(job)
+        end
+        local elapsed = now - started
+        local eta = stats.completed > 0 and elapsed / stats.completed * (total - stats.completed) or nil
+        if total == 0 or stats.completed == total then eta = 0 end
+        if stats.aborted then eta = nil end
+        local ok, err = pcall(onProgress, {
+            total = total, attempted = stats.attempted, completed = stats.completed,
+            succeeded = stats.succeeded, failed = stats.failed, timedOut = stats.timedOut,
+            active = activeCount, queued = total - stats.attempted, maxActive = stats.maxActive,
+            elapsed = elapsed, eta = eta, currentJobs = currentJobs, currentScripts = currentScripts,
+            aborted = stats.aborted, reason = stats.reason, done = closed or stats.completed == total,
+        })
+        if not ok then
+            stats.callbackErrors[#stats.callbackErrors + 1] = { callback = "onProgress", error = tostring(err) }
+            abort("callback_error", os.clock())
+        end
+    end
+
+    local function worker()
+        local sliceStarted = os.clock()
+        while not closed and nextIndex <= total do
+            if os.clock() - sliceStarted >= 0.008 then task.wait(); sliceStarted = os.clock() end
+            local now = os.clock()
+            if checkDeadline(now) or nextIndex > total then return end
+            local index = nextIndex
+            nextIndex += 1
+            local record = stats.results[index]
+            record.status, record.started = "running", now
+            active[index] = record
+            activeCount += 1
+            stats.attempted += 1
+            stats.maxActive = math.max(stats.maxActive, activeCount)
+
+            local ok, result = pcall(invoke, jobs[index], index)
+            now = os.clock()
+            -- Cancellation of a native call may be ineffective. This gate also
+            -- prevents late completions from reaching cache-writing callbacks.
+            if closed or checkDeadline(now) then return end
+            active[index] = nil
+            activeCount -= 1
+            record.finished, record.elapsed = now, now - record.started
+            stats.completed += 1
+            if ok and type(result) == "string" and #result > 0 then
+                record.status, record.source = "succeeded", result
+                stats.succeeded += 1
+            else
+                record.status = "failed"
+                record.error = ok and "decompiler returned no nonempty source string" or tostring(result)
+                stats.failed += 1
+                if options.abortOnError then
+                    local policyOk, reason = pcall(options.abortOnError, record.error)
+                    if not policyOk then
+                        stats.callbackErrors[#stats.callbackErrors + 1] = {
+                            callback = "abortOnError", index = index, error = tostring(reason),
+                        }
+                        abort("callback_error", os.clock())
+                        return
+                    elseif reason then
+                        abort(tostring(reason), os.clock())
+                        return
+                    end
+                end
+            end
+            if onComplete then
+                local callbackOk, err = pcall(onComplete, jobs[index], record, index)
+                if not callbackOk then
+                    stats.callbackErrors[#stats.callbackErrors + 1] = {
+                        callback = "onComplete", index = index, error = tostring(err),
+                    }
+                    abort("callback_error", os.clock())
+                    return
+                end
+            end
+        end
+    end
+
+    progress(started)
+    if not closed then
+        for _ = 1, math.min(concurrency, total) do
+            threads[#threads + 1] = task.spawn(worker)
+            if closed then break end
+        end
+    end
+    while not closed and stats.completed < total do
+        local now = os.clock()
+        checkDeadline(now)
+        progress(now)
+        if not closed and stats.completed < total then task.wait(0.1) end
+    end
+    -- Emit a final update only when the rate limit permits; the returned stats
+    -- always contain final state, including for pools that finish under 100 ms.
+    progress(os.clock())
+    closed = true
+    for _, thread in ipairs(threads) do
+        if coroutine.status(thread) ~= "dead" then pcall(task.cancel, thread) end
+    end
+    stats.elapsed = os.clock() - started
+    return stats
+end
+-- END DECOMPILE WORKER POOL
+
+-- Roots and ignore dictionaries must match the export. No bytecode is read here.
+local function GatherDecompileScripts(roots, IgnoreList, DecompileIgnore, ignoreNotArchivable, overrides, report)
+	local scripts, candidateSeen, visited, stack = {}, {}, {}, {}
+	local stats = { scanned = 0, candidates = 0, skipped = 0, duplicateVisits = 0, errors = 0 }
+	local started, sliceStarted = os.clock(), os.clock()
+	local sinceYield = 0
+	IgnoreList, DecompileIgnore, overrides = IgnoreList or {}, DecompileIgnore or {}, overrides or {}
+	for index = #roots, 1, -1 do
+		stack[#stack + 1] = { roots[index], false }
+	end
+	local function notify()
+		stats.elapsed = os.clock() - started
+		if report then pcall(report, stats) end
+	end
+	local function inspect(instance, inheritedIgnored)
+		-- An explicit root can be exported without the ignored parent of another root.
+		local previous = visited[instance]
+		if previous == 2 or (previous == 1 and inheritedIgnored) then
+			stats.duplicateVisits += 1
 			return
 		end
-		if o:IsA("Script") then
-			local rc = o.RunContext
-			if rc == Enum.RunContext.Server or rc == Enum.RunContext.Legacy then
-				return -- server scripts cannot be decompiled client-side
+		visited[instance] = inheritedIgnored and 1 or 2
+		local className, name = instance.ClassName, instance.Name
+		local exactIgnore, classIgnore = IgnoreList[instance], IgnoreList[className]
+		if (ignoreNotArchivable and not instance.Archivable)
+			or exactIgnore
+			or classIgnore == true
+			or (type(classIgnore) == "table" and classIgnore[name]) then
+			stats.skipped += 1
+			return
+		end
+		local rule = DecompileIgnore[instance]
+		if rule == nil then
+			local classRule = DecompileIgnore[className]
+			if classRule == true then
+				rule = true
+			elseif type(classRule) == "table" then
+				rule = classRule[name] -- Preserve false: ignore only this node's Source.
 			end
 		end
-				-- getscriptbytecode + dedup HERE, serially on the main thread - exactly like the proven
-		-- upstream ussiprepass. We keep only UNIQUE bytecode; running getscriptbytecode serially
-		-- (NOT concurrently in the workers) is what keeps huge games (Grow a Garden 2) stable.
-		local ok, bc = pcall(getscriptbytecode, o)
-		if ok and type(bc) == "string" and bc ~= "" and not seen[bc] then
-			seen[bc] = true
-			local key = sha384(bc)
-			if ldeccache[key] == nil then
-				jobs[#jobs + 1] = { script = o, bc = not nativeDecompile and bc or nil, key = key }
-				if maxScripts > 0 and #jobs > maxScripts then
-					overCap = true
-				end
+		local ignoreSource = inheritedIgnored or rule ~= nil
+		local ignoreDescendants = inheritedIgnored or not not rule
+		local override = overrides[instance]
+		if not ignoreSource and not (override and override.__SaveSpecific)
+			and not candidateSeen[instance] and instance:IsA("LuaSourceContainer") then
+			local isLocalScript = instance:IsA("LocalScript")
+			local serverOnly = isLocalScript and instance.RunContext == Enum.RunContext.Server
+				or not isLocalScript and instance:IsA("Script") and instance.RunContext ~= Enum.RunContext.Client
+			-- Serialization recovers LinkedSource first; the prepass never requests it.
+			if not serverOnly and instance.LinkedSource == "" then
+				candidateSeen[instance] = true
+				scripts[#scripts + 1] = instance
+				stats.candidates += 1
+			end
+		end
+		-- IgnoreList[instance] = false preserves the node and prunes its children.
+		if exactIgnore ~= false then
+			local children = override and override.__Children or instance:GetChildren()
+			for index = #children, 1, -1 do
+				stack[#stack + 1] = { children[index], ignoreDescendants }
 			end
 		end
 	end
+	notify()
+	while #stack > 0 do
+		local entry = stack[#stack]
+		stack[#stack] = nil
+		stats.scanned += 1
+		local ok = pcall(inspect, entry[1], entry[2])
+		if not ok then stats.errors += 1 end
+		sinceYield += 1
+		if sinceYield >= 500 or os.clock() - sliceStarted >= 0.008 then
+			notify()
+			task.wait()
+			sliceStarted, sinceYield = os.clock(), 0
+		end
+	end
+	notify()
+	return scripts, stats
+end
 
-	do
-		local scanned = 0
-		for _, o in game:GetDescendants() do
-			if overCap then
-				break
-			end
-			pcall(consider, o)
-			scanned += 1
-			if scanned % 500 == 0 then
-				task.wait() -- yield; getscriptbytecode per script is heavy on big games
-			end
-		end
-	end
-	if not overCap and getloadedmodules then
-		local ok, mods = pcall(getloadedmodules)
-		if ok and type(mods) == "table" then
-			for _, m in mods do
-				if overCap then
-					break
-				end
-				pcall(consider, m)
-			end
-		end
-	end
-
-	local total = #jobs
-	if overCap then
-		print(string.format(
-			"[saveinstance] Prepass SKIPPED — this game has more than %d unique client scripts; pre-decompiling that many via the rate-limited API would take too long. Scripts will still decompile on-demand during the save. Raise PrepassMaxScripts to force it, or use noscripts = true for a structure-only save.",
-			maxScripts
-		))
-		return false, "too many scripts (> " .. maxScripts .. "); using on-demand decompile instead"
-	end
-	print("[saveinstance] Prepass: gathered " .. total .. " unique client scripts to decompile")
-	if total == 0 then
-		return true
-	end
-
-	-- Bounded cooperative concurrency (Lua coroutines don't preempt mid-statement, so the
-	-- shared counters are safe without locks).
-	local nextIndex, done, active = 0, 0, math.min(concurrency, total)
-	local prepassStart = os.clock()
-	for _ = 1, active do
-		task.spawn(function()
-			pcall(function() -- guard: a throw here must NOT skip `active -= 1`, or the wait below hangs forever
-				while true do
-					nextIndex += 1
-					local job = jobs[nextIndex]
-					if not job then
-						return
-					end
-					-- Workers ONLY do the HTTP decompile (getscriptbytecode + dedup already happened serially
-					-- in the gather). No concurrent getscriptbytecode = stable on huge games.
-					local body
-						if nativeDecompile then
-							-- the executor's own decompiler (Volt etc.) - no external API. Synchronous/CPU-heavy,
-							-- so yield every few scripts so it does not freeze.
-							local okd, r = pcall(nativeDecompile, job.script)
-							if okd and type(r) == "string" then body = r end
-							if nextIndex % 8 == 0 then task.wait() end
-						else
-							body = decompile_via_api(job.bc, apiUrl, rateGap)
-						end
-					if body and body ~= "" then
-						ldeccache[job.key] = (string.gsub(body, "\0", "\\0"))
-						rememberDecompiler(ldeccache, job.key, ldeccache[job.key], backendName)
-					end
-					done += 1
-					if report then
-						local elapsed = os.clock() - prepassStart
-						local eta
-						if done > 0 and elapsed > 0.5 then
-							eta = (total - done) * (elapsed / done)
-						end
-						report(done, total, eta)
-					end
-				end
-			end)
-			active -= 1
-		end)
-	end
-	while active > 0 do
-		task.wait(0.1)
-	end
-	dbg("[prepass] scripts:", total, "| decompiled OK:", _api_ok, "| failed:", _api_fail, "| in", string.format("%.1fs", os.clock() - prepassStart))
-	if _api_first_fail then
-		dbg("[prepass] first API failure:", _api_first_fail)
-	end
-	return true
+local function RunDecompilePrepass(cache, O, report, provider, backend, roots, ignores, decompileIgnores, overrides)
+    if not (getscriptbytecode and sha384) then return false, "bytecode API unavailable" end
+    local scripts = GatherDecompileScripts(roots, ignores, decompileIgnores, O.IgnoreNotArchivable, overrides)
+    local jobs, seen, cached = {}, {}, 0
+    local maxScripts = tonumber(O.PrepassMaxScripts) or 6000
+    local started = os.clock()
+    for _, script in scripts do
+        local ok, bc = pcall(getscriptbytecode, script)
+        if ok and type(bc) == "string" and bc ~= "" then
+            local key = sha384(bc)
+            if not seen[key] then
+                seen[key] = true
+                if cache[key] then cached += 1
+                else
+                    jobs[#jobs + 1] = {script=script, key=key, name=script:GetFullName()}
+                    if maxScripts > 0 and #jobs > maxScripts then
+                        return false, "script cap exceeded; using on-demand decompilation"
+                    end
+                end
+            end
+        end
+        if os.clock() - started >= 0.008 then task.wait(); started = os.clock() end
+    end
+    local stats = RunDecompileJobs(jobs, {
+        concurrency=O.PrepassConcurrency, timeout=O.timeout, maxTime=O.PrepassMaxTime,
+    }, function(job)
+        if provider then return provider(job.script) end
+        local bc = getscriptbytecode(job.script)
+        return decompile_via_api(bc, O.PrepassApiUrl, O.PrepassRateGap)
+    end, function(job, result)
+        if result.status == "succeeded" then
+            local source = string.gsub(result.source, "\0", "\\0")
+            cache[job.key] = source
+            rememberDecompiler(cache, job.key, source, backend)
+        end
+    end, function(progress)
+        progress.cached = cached
+        if report then report(progress) end
+    end)
+    dbg("[prepass]", backend, "ok:", stats.succeeded, "failed:", stats.failed,
+        "cached:", cached, "seconds:", stats.elapsed, "aborted:", stats.aborted)
+    return not stats.aborted, stats.reason, stats
 end
 
 -- Reports executor capabilities that affect the save so the user knows up front WHY a save might
@@ -2659,9 +2796,10 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		-- * ExportObj: also write a world-space .obj of all MeshPart geometry (recovered via EditableMesh) next to the save, so PRIVATE meshes that show as grey boxes in Studio can be recovered/viewed in Blender. Pair with SetStreaming. Large on big maps.
 		ExportObj = false,
 
-		-- * Decompilation prepass: parallel-decompile all client scripts via an external API before saving (big speedup on script-heavy games). RISKY: sends script bytecode to a third-party API.
+		-- * Decompilation prepass: decompile eligible exported scripts through the selected provider before serialization.
 		DecompilePrepass = false,
-		PrepassConcurrency = 24, -- parallel decompile requests kept in flight
+		PrepassConcurrency = 4, -- parallel decompile requests kept in flight
+		PrepassMaxTime = 300, -- overall worker deadline in seconds
 		PrepassRateGap = 0.12, -- min seconds between API requests (lua.expert rejects unthrottled bursts). Lower = faster if the API allows.
 		PrepassApiUrl = "https://api.lua.expert/decompile",
 		PrepassMaxScripts = 6000, -- upper safety bound: only skip the prepass on truly enormous games (the gather is now cheap and decompiles are rate-limited, so this guards against an absurdly long run, not a crash). On-demand decompile takes over if exceeded.
@@ -2752,6 +2890,8 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 				CustomOptions.Object = tmp
 			elseif Type == "table" and typeof(tmp[1]) == "Instance" then
 				CustomOptions.ExtraInstances = tmp
+				-- A two-argument instance list is scoped just like the one-argument form.
+				OPTIONS.mode = "invalidmode"
 				OPTIONS.IsModel = true
 			end
 		end
@@ -3160,6 +3300,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		end
 	end
 
+	local prepassStopped
 	local getbytecode
 	if getscriptbytecode then
 		getbytecode = construct_TimeoutHandler(3, getscriptbytecode) -- ? Solara fix
@@ -3223,6 +3364,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 					task.wait() -- TODO Maybe remove?
 				end
 
+				if prepassStopped then return "-- Decompilation stopped after prepass failure", "None (prepass stopped)" end
 				if DecompileJobless then return "-- Not found in already decompiled ScriptCache", "None (cache miss)" end
 				local ok, result = run_with_loading("Decompiling [" .. DecompilerName .. "] " .. script.Name, true, nil, decomp, script)
 				if type(result) ~= "string" or result == "" then
@@ -3280,7 +3422,8 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 					if cached then
 						return cached, cachedDecompiler(ldeccache, hashed, cached)
 					end
-					if DecompileJobless then return "-- Not found in already decompiled ScriptCache", "None (cache miss)" end
+					if prepassStopped then return "-- Decompilation stopped after prepass failure", "None (prepass stopped)" end
+				if DecompileJobless then return "-- Not found in already decompiled ScriptCache", "None (cache miss)" end
 					if canApi then
 						local body = decompile_via_api(bytecode, OPTIONS.PrepassApiUrl, OPTIONS.PrepassRateGap)
 						if body and body ~= "" then
@@ -4270,32 +4413,46 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 
 		StatusText.Text = "Saving..."
 
-		StatusText.BackgroundTransparency = 1
+		StatusText.BackgroundTransparency = 0.08
+		StatusText.BackgroundColor3 = Color3.fromRGB(20, 24, 33)
+		StatusText.BorderSizePixel = 0
 		StatusText.Font = Enum.Font.Code
-		StatusText.AnchorPoint = Vector2.new(1)
-		StatusText.Position = UDim2.new(1)
-		StatusText.Size = UDim2.new(0.3, 0, 0, 20)
+		StatusText.AnchorPoint = Vector2.new(0.5, 0.5)
+		StatusText.Position = UDim2.fromScale(0.5, 0.5)
+		StatusText.Size = UDim2.new(0.85, 0, 0, 150)
+		local SizeLimit = Instance.new("UISizeConstraint")
+		SizeLimit.MaxSize = Vector2.new(680, 150)
+		SizeLimit.Parent = StatusText
+		local Corner = Instance.new("UICorner")
+		Corner.CornerRadius = UDim.new(0, 12)
+		Corner.Parent = StatusText
 
 		StatusText.TextColor3 = Color3.new(1, 1, 1)
-		StatusText.TextScaled = true
+		StatusText.TextScaled = false
+		StatusText.TextSize = 17
+		StatusText.TextWrapped = true
 		StatusText.TextStrokeTransparency = 0.7
-		StatusText.TextXAlignment = Enum.TextXAlignment.Right
-		StatusText.TextYAlignment = Enum.TextYAlignment.Top
+		StatusText.TextXAlignment = Enum.TextXAlignment.Center
+		StatusText.TextYAlignment = Enum.TextYAlignment.Center
 
 		StatusText.Parent = StatusGui
-		local BackendText = StatusText:Clone()
+		local BackendText = Instance.new("TextLabel")
+		BackendText.BackgroundTransparency = 1
+		BackendText.Font = Enum.Font.GothamBold
+		BackendText.TextSize = 18
+		BackendText.TextColor3 = Color3.fromRGB(125, 194, 255)
 		BackendText.Name = "DecompilerBackend"
-		BackendText.Position = UDim2.new(1, 0, 0, -23)
-		BackendText.AnchorPoint = Vector2.new(1, 0)
-		BackendText.Size = UDim2.new(1, 0, 0, 20)
+		BackendText.Position = UDim2.new(0, 16, 0, 12)
+		BackendText.AnchorPoint = Vector2.new(0, 0)
+		BackendText.Size = UDim2.new(1, -32, 0, 24)
 		BackendText.Text = "Selected decompiler: " .. DecompilerStatus
 		BackendText.Parent = StatusText
 
 		do -- * Save progress bar: a thin track + fill, just under the status text. Parented to StatusText so it's destroyed together with it.
 			local ProgressTrack = Instance.new("Frame")
 			ProgressTrack.AnchorPoint = Vector2.new(0, 0)
-			ProgressTrack.Position = UDim2.new(0, 0, 1, 2)
-			ProgressTrack.Size = UDim2.new(1, 0, 0, 6)
+			ProgressTrack.Position = UDim2.new(0, 18, 1, -20)
+			ProgressTrack.Size = UDim2.new(1, -36, 0, 7)
 			ProgressTrack.BackgroundColor3 = Color3.new(0, 0, 0)
 			ProgressTrack.BackgroundTransparency = 0.5
 			ProgressTrack.BorderSizePixel = 0
@@ -4308,7 +4465,8 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 			ProgressFill.Parent = ProgressTrack
 
 			-- Estimated denominator (actual saved count is usually a bit lower due to filtering, so the bar is clamped below 100% until the final "Saved!")
-			total_count = #(ToSaveInstance or game):GetDescendants()
+			total_count = 0
+			for _, root in ToSaveList do total_count += 1 + #root:GetDescendants() end
 		end
 
 		local function randomString()
@@ -4485,24 +4643,26 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		end
 
 		if OPTIONS.DecompilePrepass and not OPTIONS.DecompileJobless and not streamingError and not OPTIONS.noscripts and ScriptCache and ldeccache then
-			print("[saveinstance] DecompilePrepass: decompiling all scripts in parallel...")
+			print("[saveinstance] DecompilePrepass: processing eligible exported scripts...")
 			if StatusText then
 				StatusText.Text = "Decompiling scripts (prepass)..."
 			end
-			local prepassOk, prepassReason = RunDecompilePrepass(ldeccache, OPTIONS, function(decompiled, totalScripts, eta)
-				if StatusText then
-					StatusText.Text = string.format(
-						"Decompile prepass: %d / %d scripts%s",
-						decompiled,
-						totalScripts,
-						eta and (" (~" .. fmt_eta(eta) .. " left)") or ""
-					)
-				end
-				if ProgressFill and totalScripts > 0 then
-					ProgressFill.Size = UDim2.new(decompiled / totalScripts, 0, 1, 0)
-				end
-			end, NativeDecompiler, DecompilerName)
-			print(prepassOk and "[saveinstance] Decompile prepass complete." or ("[saveinstance] Decompile prepass skipped: " .. tostring(prepassReason)))
+            local callOk, prepassOk, prepassReason, stats = pcall(RunDecompilePrepass,
+                ldeccache, OPTIONS, function(p)
+                    if StatusText then
+                        StatusText.Text = string.format("%s: %d/%d | %d ok, %d failed\n%d cached | %d active%s",
+                            DecompilerName, p.completed, p.total, p.succeeded, p.failed, p.cached, p.active,
+                            p.eta and (" | ETA " .. fmt_eta(p.eta)) or "")
+                    end
+                    if ProgressFill and p.total > 0 then
+                        ProgressFill.Size = UDim2.new(p.completed / p.total, 0, 1, 0)
+                    end
+                end, NativeDecompiler, DecompilerName, ToSaveList, IgnoreList, DecompileIgnore, InstancesOverrides)
+            -- A cancelled native call may still run: never start on-demand replacement work.
+            prepassStopped = not callOk or (stats and stats.aborted)
+            print(callOk and prepassOk and "[saveinstance] Decompile prepass complete."
+                or "[saveinstance] Prepass stopped/skipped: " .. tostring(callOk and prepassReason or prepassOk))
+
 			if ProgressFill then -- reset the bar for the save phase
 				ProgressFill.Size = UDim2.new(0, 0, 1, 0)
 			end

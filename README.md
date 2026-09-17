@@ -2,19 +2,19 @@
 
 The saveinstance that actually saves your game **the way it looks.**
 
-Most saveinstance scripts hand you a broken file — grey parts, missing images, no scripts, half the map. This one doesn't.
+Exports the instances available to your client, with streaming helpers, terrain serialization, and decompiler support.
 
 ## Why use this one
 
 - 🎨 **Correct colors & sizes** — other savers drop these and everything loads grey and default-sized. This saves them right.
 - 🖼️ **Decals, images & sounds save** — the stuff modern savers silently miss.
 - 🧩 **Unions & terrain render properly** — not invisible, not grey boxes.
-- 🗺️ **Grabs the WHOLE map** — force-loads streaming games so you get the entire place, not just what's next to you.
+- 🗺️ **Streaming coverage tools** — request additional map regions before saving; coverage depends on what the server streams to the client.
 - 📜 **Decompiles scripts even if your executor can't** — free built-in fallback, plus a fast parallel mode for script-heavy games.
 - ☀️ **Opens bright** — optional one-liner so your save isn't dark and foggy.
 - 🧱 **Recovers meshes** — pull private mesh geometry out to `.obj` (Blender-ready).
-- ⚡ **Fast and won't crash** — handles huge games without running out of memory.
-- 🔌 **Works on any executor** — Volt, Solara, Wave, and the rest.
+- ⚡ **Bounded decompiler concurrency** — defaults to four workers, with deadlines and progress reporting.
+- 🔌 **Executor capability checks** — available features depend on the executor APIs.
 
 ## Usage
 
@@ -27,16 +27,20 @@ local Params = {
 local synsaveinstance = loadstring(game:HttpGet(Params.RepoURL .. Params.SSI .. ".luau", true), Params.SSI)()
 
 synsaveinstance({
-    SetStreaming = false,       -- true = capture the whole streaming map
-    DecompilePrepass = false,   -- true = decompile all scripts fast, up front
+    SetStreaming = false,       -- true = request additional streamed regions
+    DecompilePrepass = false,   -- true = decompile eligible exported scripts
     NeutralizeLighting = false, -- true = save opens in bright daylight
     ExportObj = false,          -- true = also dump meshes to a .obj
 })
 ```
 
-That's it — one call, no extra scripts. Every option is off by default; flip on what you want.
+That's it — one call, no extra scripts. The optional features shown above are off by default; normal script decompilation is enabled.
 
 📖 **Full option list:** https://pages.sirmemegithub.com/SaveInstance420Edition/
+
+## Faster script exports
+
+Enable `DecompilePrepass = true` with `PrepassConcurrency = 4`. The saver uses the installed `decompile()` hook, including a configured Oracle loader; lua.expert is used when that hook is absent. Each exported source identifies its provider beneath the banner. The centered status panel shows progress and ETA. See the option list for provider registration and timeout behavior.
 
 ## Credits
 

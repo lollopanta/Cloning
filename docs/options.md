@@ -94,9 +94,11 @@ If your executor has no decompiler, scripts fall back to the free **lua.expert**
 
 | Option | Default | What it does |
 |---|---|---|
-| `DecompilePrepass` | `false` | **Decompile every script in parallel** via lua.expert *before* saving — big speedup on script-heavy games. Sends bytecode to a third-party API. |
-| `PrepassConcurrency` | `24` | Parallel decompile requests during the prepass. |
-| `PrepassRateGap` | `0.12` | Min seconds between API requests (lower = faster if the API allows). |
+| `DecompilePrepass` | `false` | **Decompile eligible exported scripts concurrently** through the selected provider *before* saving — big speedup on script-heavy games. Oracle and API fallback providers send bytecode remotely. |
+| `PrepassConcurrency` | `4` | Concurrent calls to the selected provider; rounded down and capped at 8. |
+| `PrepassMaxTime` | `300` | Overall worker deadline in seconds. An abort prevents further on-demand calls during that save. |
+| `PrepassRateGap` | `0.12` | Minimum spacing for built-in fallback API requests; does not throttle an installed Oracle hook. |
+| `PrepassMaxScripts` | `6000` | Skip the prepass above this unique uncached-script count and use on-demand decompilation. |
 | `PrepassApiUrl` | `api.lua.expert/decompile` | Decompile API endpoint. |
 | `timeout` | `10` | Per-script decompile timeout in seconds (alias: `DecompileTimeout`). |
 | `SaveBytecode` | `false` | Also embed each script's bytecode in the output. |
@@ -139,3 +141,5 @@ Try these only if a save crashes or corrupts.
 | `SaveCacheInterval` | `~57k` | How often (bytes) to flush to file — lower = safer but slower. |
 
 > Full machine-generated reference (types, aliases, every field): **[SynSaveInstance API →](../api/SynSaveInstance)**
+
+Prepass status shows the selected provider, completed/total jobs, successes, failures, cached scripts, active workers, and ETA. Oracle uses overlapping requests, not CPU multithreading. Start with four workers; provider limits still apply. The exporter preserves completed cache entries after a timeout and marks remaining uncached scripts as stopped.
