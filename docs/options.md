@@ -1,145 +1,100 @@
 ---
-sidebar_position: 2
+sidebar_position: 4
+title: Options reference
 ---
 
-# Options Reference
+# Options reference
 
-Every option is **optional** and **case-insensitive** — pass them in the table you give to
-`synsaveinstance({ ... })`. Grouped by what they do. For the raw, exhaustive list see the
-[SynSaveInstance API](../api/SynSaveInstance).
+Pass these settings to `saveinstance({ ... })`. Names are case-insensitive. The tables below cover the main controls; the [generated API reference](../api/SynSaveInstance) lists the remaining fields and aliases.
 
-```lua
-synsaveinstance({
-    SetStreaming = true,
-    NeutralizeLighting = true,
-})
-```
+Defaults here follow the current script. Some compatibility defaults depend on your executor.
 
-## Most common
+## Output and scope
 
-### Which decompiler is used? Does Oracle work?
-
-SaveInstance first uses the installed `decompile()` function. This is often the executor's
-own decompiler, but a custom loader can replace it. Oracle works through this hook: run
-your configured Oracle loader before SaveInstance. SaveInstance does not include an
-Oracle subscription or key, and it does not choose Oracle simply from its name.
-
-When no `decompile()` function exists, SaveInstance uses the lua.expert HTTP fallback
-if bytecode, Base64, and HTTP request functions are available. A failed installed
-decompiler does not automatically switch to lua.expert. `DecompilePrepass=false`
-disables the prepass, not ordinary script decompilation.
-
-The save status and console show the selected backend. Each saved script includes:
-
-```lua
--- Saved by USSI modded by Robloxscripts.com (Join the Discord) discord.robloxscripts.com
--- Decompiler used: Oracle
-```
-
-For a custom loader, register its name immediately after installing the function:
-
-```lua
-getgenv().__SaveInstanceDecompiler = {
-    Name = "Oracle",
-    Function = getgenv().decompile,
-}
-```
-
-Registration only applies while that exact function remains installed. Alternatively,
-pass `DecompilerName = "Oracle"` to label your configured hook for one save. This option
-is a display label, not a provider selector. Unregistered hooks are identified as
-`Executor decompile() (executor name)` because their internal provider cannot be inferred.
-
-Known cached results preserve their recorded backend, such as `Oracle (cached)`.
-Older cache entries without provenance say `Unknown (legacy cache)`. Disabled, ignored,
-empty, provided, original linked, or inaccessible server-only source is labelled separately.
-
-| Option | Default | What it does |
+| Option | Default | Behavior |
 |---|---|---|
-| `mode` | `"optimized"` | `"full"`, `"optimized"`, or `"scripts"`. `"optimized"` is smallest; use `"full"` for maximum fidelity. |
-| `noscripts` | `false` | Skip decompiling — save the map & structure only (scripts kept as empty instances). |
-| `SafeMode` | `false` | Kicks you from the game right before saving (anti-detection). |
-| `ShowStatus` | `true` | Show the on-screen progress bar. |
-| `DecompilerName` | *(auto)* | Display label for the installed `decompile()` hook; does not change providers. |
-| `Debug` | `false` | Write `saveinstance-debug.txt` (executor, capabilities, stats) — send it for troubleshooting. |
-| `FilePath` | *(auto)* | Output file name (no extension). Defaults to `place <id> <name>`. |
-| `Callback` | `false` | Receive the serialized string in a function instead of writing a file. |
+| `FilePath` | Automatic | Output name without an extension. |
+| `mode` | `"optimized"` | Select game roots using `"optimized"`, `"full"`, or `"scripts"`. Scripts mode still includes surrounding hierarchy. |
+| `Object` | `false` | Export a particular instance. Normally produces `.rbxmx`. |
+| `IsModel` | `false` | Model output flag; automatically enabled when `Object` is supplied unless explicitly overridden. |
+| `ExtraInstances` | `{}` | Add instances to the selected roots. For only selected instances, use the [list form](./intro#save-a-single-model). |
+| `IgnoreList` | CoreGui, CorePackages | Skip listed instances or classes. |
+| `IgnoreProperties` | `{}` | Omit named properties. |
+| `IgnoreDefaultProperties` | `true` | Omit properties equal to their class defaults. |
+| `IgnoreNotArchivable` | `true` | Ignore the `Archivable` flag and include non-archivable instances. Set false to respect it. |
+| `NilInstances` | `false` | Include supported instances parented to nil. |
+| `ReadMe` | `true` | Include the saver's readme content in the output. |
+| `Callback` | `false` | Receive serialized data in a callback. The current writer can still create an initial file header. |
 
-## Map streaming — capture the whole map
+## Decompiler options
 
-Big **StreamingEnabled** maps only load chunks near you. These force-load the entire map first.
+See [Decompile scripts](./decompilation) for provider selection and Oracle registration.
 
-| Option | Default | What it does |
+| Option | Default | Behavior |
 |---|---|---|
-| `SetStreaming` | `false` | **Force-load the whole StreamingEnabled map** before saving (alias: `Streaming`). |
-| `StreamingAreaSize` | `10000` | Side length (studs) of the swept area. Raise for maps wider than 10k studs. |
-| `StreamingConcurrency` | `false` (auto) | Requests in flight at once. Auto-scales to map size; set a number to force. |
-| `StreamingMaxTime` | `false` (auto) | Overall time cap for the sweep. Auto-scales (60s–15m); never hangs. |
-| `StreamingChunkWait` | `12` | Max seconds to wait for one chunk (stability detection returns sooner). |
-| `StreamingSettleTime` | `5` | Wait after the sweep for terrain/background loads to finish (fixes floating-island terrain). |
-| `StreamingRadius` | `1024` | Per-request radius (auto-uses the game's `StreamingTargetRadius`). |
-| `StreamingSlices` | `2` | Vertical layers per grid cell; raise for tall maps. |
+| `noscripts` | `false` | Disable source decompilation; retain script instances. |
+| `DecompilerName` | Automatic | Display label for the installed hook. Does not select a provider. |
+| `DecompilePrepass` | `false` | Decompile eligible export scripts before serialization. |
+| `PrepassConcurrency` | `4` | Concurrent provider calls; rounded down, maximum eight. |
+| `PrepassMaxTime` | `300` | Overall worker deadline in seconds. |
+| `timeout` | `10` | Per-script deadline in seconds. Alias: `DecompileTimeout`. |
+| `PrepassMaxScripts` | `6000` | Above this unique uncached-job count, skip the prepass and decompile on demand. |
+| `PrepassRateGap` | `0.12` | Minimum spacing in seconds for built-in API fallback requests. Does not affect custom hooks. |
+| `PrepassApiUrl` | `https://api.lua.expert/decompile` | Built-in fallback endpoint. |
+| `scriptcache` | `true` | Reuse decompiled source where bytecode and hash APIs are available. |
+| `DecompileJobless` | `false` | Use cached source only; do not start new provider calls. |
+| `DecompileIgnore` | TextChatService | Skip source for specified instances or classes. |
+| `SaveBytecode` | `false` | Embed readable bytecode as Base64 in the source output. |
 
-## Visuals & mesh recovery
+## Streaming options
 
-| Option | Default | What it does |
+The [streaming guide](./streaming) explains how to choose an area and check the result.
+
+| Option | Default | Behavior |
 |---|---|---|
-| `NeutralizeLighting` | `false` | Reset Lighting/Atmosphere/effects to clean midday so the place opens **bright**, not dark/foggy. |
-| `ExportObj` | `false` | Also bake all MeshPart geometry to a world-space `.obj` (opens in Blender) — the only way to recover **private** meshes that Studio can't re-download. Best with `SetStreaming`. |
-| `TreatUnionsAsParts` | `false`¹ | Convert Unions to plain Parts (for executors that can't read union mesh data). ¹`true` on Solara. |
+| `SetStreaming` | `false` | Request regions before exporting. Alias: `Streaming`. |
+| `StreamingAreaSize` | `10000` | Width of the request square in studs. |
+| `StreamingRadius` | `512` | Request-grid spacing in studs. |
+| `StreamingCenter` | `false` | Character position, or a supplied `Vector3`. |
+| `StreamingPoints` | `false` | Explicit `Vector3` array instead of the generated grid. |
+| `StreamingSlices` | `2` | Vertical layers. |
+| `StreamingPasses` | `1` | Sweep repetitions. |
+| `StreamingConcurrency` | `4` | Awaited requests in flight; maximum eight. |
+| `StreamingTimeout` | `20` | Per-request deadline in seconds. |
+| `StreamingChunkWait` | `6` | Post-request observation time in seconds. |
+| `StreamingSettleTime` | `5` | Time for background loads to settle after the sweep. |
+| `StreamingMaxTime` | `false` | Automatic overall limit, or a number of seconds. |
+| `StreamingRequireComplete` | `true` | Stop the export after a failed or incomplete sweep. |
+| `StreamingCancel` | `false` | Callback; return true to cancel and stop the export. |
+| `StreamingValidate` | `false` | Coverage callback; return true, or false and a reason. |
 
-## Decompiling scripts
+## Appearance and players
 
-If your executor has no decompiler, scripts fall back to the free **lua.expert** API automatically.
-
-| Option | Default | What it does |
+| Option | Default | Behavior |
 |---|---|---|
-| `DecompilePrepass` | `false` | **Decompile eligible exported scripts concurrently** through the selected provider *before* saving — big speedup on script-heavy games. Oracle and API fallback providers send bytecode remotely. |
-| `PrepassConcurrency` | `4` | Concurrent calls to the selected provider; rounded down and capped at 8. |
-| `PrepassMaxTime` | `300` | Overall worker deadline in seconds. An abort prevents further on-demand calls during that save. |
-| `PrepassRateGap` | `0.12` | Minimum spacing for built-in fallback API requests; does not throttle an installed Oracle hook. |
-| `PrepassMaxScripts` | `6000` | Skip the prepass above this unique uncached-script count and use on-demand decompilation. |
-| `PrepassApiUrl` | `api.lua.expert/decompile` | Decompile API endpoint. |
-| `timeout` | `10` | Per-script decompile timeout in seconds (alias: `DecompileTimeout`). |
-| `SaveBytecode` | `false` | Also embed each script's bytecode in the output. |
-| `DecompileJobless` | `false` | Only include already-decompiled code; decompile nothing new. |
+| `NeutralizeLighting` | `false` | Reset lighting and effects for a brighter saved scene. |
+| `ExportObj` | `false` | Attempt a separate world-space mesh export to `.obj`; depends on mesh API access. |
+| `TreatUnionsAsParts` | Executor-dependent | Save a plain Part representation where union geometry cannot be read. |
+| `RemovePlayerCharacters` | `true` | Exclude player characters. |
+| `IsolateLocalPlayer` | `false` | Isolate the local player's contents in the export. |
+| `IsolateLocalPlayerCharacter` | `false` | Isolate the local character. |
+| `IsolateStarterPlayer` | `false` | Isolate StarterPlayer contents. |
+| `IsolatePlayers` | `false` | Isolate player data. |
 
-## Choosing what to save
+## Status and compatibility
 
-| Option | Default | What it does |
+| Option | Default | Behavior |
 |---|---|---|
-| `Object` | `false` | Save a specific instance (e.g. `game.Workspace`) as `.rbxmx` instead of the whole place. |
-| `IsModel` | `false` | Force model (`.rbxmx`) vs place (`.rbxlx`) output. |
-| `IgnoreList` | `{CoreGui, CorePackages}` | Instances/classes to skip (and their descendants). |
-| `ExtraInstances` | `{}` | Save only these instances (use with an invalid `mode`). |
-| `IgnoreProperties` | `{}` | Skip specific properties by name. |
-| `IgnoreDefaultProperties` | `true` | Omit properties equal to their class default (smaller files). |
-| `IgnoreNotArchivable` | `true` | Save instances even if `Archivable = false`. |
-| `NilInstances` | `false` | Also save instances parented to `nil`. |
+| `ShowStatus` | `true` | Show the centered stage and progress panel. |
+| `Debug` | `false` | Write `saveinstance-debug.txt` to the executor workspace. |
+| `SafeMode` | `false` | Kick the player and change client state before saving. |
+| `ShutdownWhenDone` | `false` | Shut down the client after a successful save. |
+| `AntiIdle` | `true` | Enable the saver's anti-idle handling. |
+| `IgnoreSpecialProperties` | Executor-dependent | Skip hidden-property reads, reducing the fidelity of some geometry. |
+| `IgnoreSharedStrings` | Usually true | SharedString compatibility control; selected geometry handling is special-cased. |
+| `UseUGCValidationService` | `true` | Allow the UGC validation fallback for property reads. |
+| `AlternativeWritefile` | Usually true | Use the alternate writer; executor compatibility can change the default. |
+| `IgnoreDefaultPlayerScripts` | Usually true | Skip default player scripts; differs on Wave. |
+| `SaveCacheInterval` | `56320` | Buffered-write threshold in bytes. |
 
-## Player isolation
-
-| Option | Default | What it does |
-|---|---|---|
-| `RemovePlayerCharacters` | `true` | Skip player characters entirely. |
-| `IsolateLocalPlayer` | `false` | Save your player's children into a separate folder (not as a live Player). |
-| `IsolateLocalPlayerCharacter` | `false` | Same, for your character. |
-| `IsolateStarterPlayer` | `false` | Clear StarterPlayer and folder-ize the saved starter player. |
-| `IsolatePlayers` | `false` | Save players but hidden (viewable only in the file text). |
-
-## Stability & crash fixes (advanced / risky)
-
-Try these only if a save crashes or corrupts.
-
-| Option | Default | What it does |
-|---|---|---|
-| `IgnoreSpecialProperties` | `false` | Skip `gethiddenproperty` calls (helps crashes, but **breaks Unions/Terrain**). |
-| `IgnoreSharedStrings` | `true` | Drop SharedStrings (crash fix). Union geometry is whitelisted so it still saves. |
-| `UseUGCValidationService` | `true` | Set `false` to never use `UGCValidationService` as a hidden-property fallback. |
-| `AlternativeWritefile` | `true` | Write the file in segments (helps write-time crashes). |
-| `IgnoreDefaultPlayerScripts` | `true` | Skip PlayerModule/RbxCharacterSounds (crash fix on some executors). |
-| `SaveCacheInterval` | `~57k` | How often (bytes) to flush to file — lower = safer but slower. |
-
-> Full machine-generated reference (types, aliases, every field): **[SynSaveInstance API →](../api/SynSaveInstance)**
-
-Prepass status shows the selected provider, completed/total jobs, successes, failures, cached scripts, active workers, and ETA. Oracle uses overlapping requests, not CPU multithreading. Start with four workers; provider limits still apply. The exporter preserves completed cache entries after a timeout and marks remaining uncached scripts as stopped.
+Change compatibility settings only when they address a specific failing path. Start with the [troubleshooting guide](./troubleshooting) rather than toggling several at once.

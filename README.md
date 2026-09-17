@@ -1,56 +1,37 @@
 # SaveInstance 420 Edition
 
-The saveinstance that actually saves your game **the way it looks.**
+Export Roblox places and models from the state available to your client. Includes streaming requests, terrain serialization, decompiler identification, and a bounded decompile prepass.
 
-Exports the instances available to your client, with streaming helpers, terrain serialization, and decompiler support.
-
-## Why use this one
-
-- 🎨 **Correct colors & sizes** — other savers drop these and everything loads grey and default-sized. This saves them right.
-- 🖼️ **Decals, images & sounds save** — the stuff modern savers silently miss.
-- 🧩 **Unions & terrain render properly** — not invisible, not grey boxes.
-- 🗺️ **Streaming coverage tools** — request additional map regions before saving; coverage depends on what the server streams to the client.
-- 📜 **Decompiles scripts even if your executor can't** — free built-in fallback, plus a fast parallel mode for script-heavy games.
-- ☀️ **Opens bright** — optional one-liner so your save isn't dark and foggy.
-- 🧱 **Recovers meshes** — pull private mesh geometry out to `.obj` (Blender-ready).
-- ⚡ **Bounded decompiler concurrency** — defaults to four workers, with deadlines and progress reporting.
-- 🔌 **Executor capability checks** — available features depend on the executor APIs.
-
-## Usage
+## Start here
 
 ```lua
-local Params = {
-    RepoURL = "https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition/raw/branch/main/",
-    SSI = "saveinstance",
-}
+local saveinstance = loadstring(game:HttpGet(
+    "https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition/raw/branch/main/saveinstance.luau"
+))()
 
-local synsaveinstance = loadstring(game:HttpGet(Params.RepoURL .. Params.SSI .. ".luau", true), Params.SSI)()
-
-synsaveinstance({
-    SetStreaming = false,       -- true = request additional streamed regions
-    DecompilePrepass = false,   -- true = decompile eligible exported scripts
-    NeutralizeLighting = false, -- true = save opens in bright daylight
-    ExportObj = false,          -- true = also dump meshes to a .obj
+saveinstance({
+    FilePath = "My place",
+    SafeMode = false,
+    Debug = true,
 })
 ```
 
-That's it — one call, no extra scripts. The optional features shown above are off by default; normal script decompilation is enabled.
+The output goes to your executor's workspace. Open it in Studio and check recognizable geometry and scripts before relying on it. A finished export does not prove complete streaming coverage.
 
-📖 **Full option list:** https://pages.sirmemegithub.com/SaveInstance420Edition/
+## Documentation
 
-## Faster script exports
+- [Make your first save](https://pages.sirmemegithub.com/SaveInstance420Edition/docs/intro/)
+- [Load streamed regions](https://pages.sirmemegithub.com/SaveInstance420Edition/docs/streaming/)
+- [Decompile scripts and configure Oracle](https://pages.sirmemegithub.com/SaveInstance420Edition/docs/decompilation/)
+- [Options reference](https://pages.sirmemegithub.com/SaveInstance420Edition/docs/options/)
+- [Troubleshoot an export](https://pages.sirmemegithub.com/SaveInstance420Edition/docs/troubleshooting/)
 
-Enable `DecompilePrepass = true` with `PrepassConcurrency = 4`. The saver uses the installed `decompile()` hook, including a configured Oracle loader; lua.expert is used when that hook is absent. Each exported source identifies its provider beneath the banner. The centered status panel shows progress and ETA. See the option list for provider registration and timeout behavior.
+## Decompiler behavior
 
-## Credits
+The installed `decompile()` hook takes precedence, including a configured Oracle loader. When no hook exists, the saver can use lua.expert if the required APIs are available. `DecompilePrepass=true` enables a four-worker prepass by default. Each saved source records the provider used, including cache provenance where known.
 
-Built on the original **[UniversalSynSaveInstance](https://luau.github.io/)** by the luau project — please support them.
-Streaming & prepass ideas by [centerepic](https://github.com/centerepic). Decompiler by [lua.expert](https://lua.expert).
+## Source and credits
 
-Modified by **Robloxscripts.com** — Discord: discord.robloxscripts.com
+Maintained by SirMeme at the [self-hosted repository](https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition). Built on [UniversalSynSaveInstance](https://luau.github.io/) by the luau project, with streaming and prepass ideas from [centerepic](https://github.com/centerepic). Built-in HTTP fallback provided by [lua.expert](https://lua.expert).
 
-<!-- sirmeme-watermark -->
-
----
-<sub>⭐ <b>Official source:</b> <a href="https://sirmemegithub.com/RealSlimShady2000/saveinstance420edition">sirmemegithub.com/RealSlimShady2000/saveinstance420edition</a> &nbsp;·&nbsp; built &amp; maintained by <b>SirMeme</b>. Got this somewhere else? Grab the latest, verified version at the link above.</sub>
-<!-- /sirmeme-watermark -->
+[Robloxscripts.com](https://robloxscripts.com) · [Community Discord](https://discord.robloxscripts.com)

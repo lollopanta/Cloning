@@ -1774,7 +1774,7 @@ local GLOBAL_ENV = getgenv and getgenv() or _G or shared
 --- @field StreamingChunkWait number -- Post-request observation cap; unchanged part counts are not proof of completeness. Default: 6
 --- @field StreamingSettleTime number -- * Seconds to wait after the streaming sweep for in-flight background terrain/loads to finish before saving. Also caps the post-sweep terrain-stabilization poll (waits until SmoothGrid stops growing) so terrain fills in instead of leaving floating islands. ___Default:___ 5
 --- @field NeutralizeLighting boolean -- * Reset `Lighting` (ClockTime/Fog/Ambient), `Atmosphere`, post-effects (ColorCorrection/Bloom/Blur/SunRays/DoF) and clouds to clean midday right before saving, so the place opens BRIGHT instead of inheriting the game's dark/foggy/night atmosphere (the "all grey on the camera" look). `false` keeps the game's real lighting. ___Default:___ false
---- @field ExportObj boolean -- * Also write a world-space `.obj` of all MeshPart geometry next to the save. Geometry is recovered with `AssetService:CreateEditableMeshAsync`, which works even for PRIVATE game meshes that Studio can't re-download (those save as grey boxes). The `.obj` (with per-part vertex colors) opens in Blender or Studio's 3D importer. MeshParts can't be made to render inside the place file itself, so this is the only way to recover their visuals. Best paired with `SetStreaming` (load the whole map first). World-space baking duplicates reused meshes, so big maps produce large files. ___Default:___ false
+--- @field ExportObj boolean -- Attempt a separate world-space mesh export to .obj. Requires access through the mesh APIs; restricted assets may remain unavailable. Large maps can produce large files. Default: false
 --- @field Debug boolean -- * Writes a detailed run log to `saveinstance-debug.txt` in the executor workspace (executor, capabilities, options, streaming/prepass/decompile stats, save result). Share it for diagnosis. ___Default:___ false
 --- @field DecompilePrepass boolean -- Pre-decompile eligible exported scripts through the selected provider with bounded concurrency. Providers such as Oracle and lua.expert send bytecode remotely. ___Default:___ false
 --- @field PrepassConcurrency number -- * Parallel decompile requests kept in flight during the prepass. ___Default:___ 4 (maximum 8)
@@ -2375,9 +2375,9 @@ local function GatherDecompileScripts(roots, IgnoreList, DecompileIgnore, ignore
 	return scripts, stats
 end
 
-local function RunDecompilePrepass(cache, O, report, provider, backend, roots, ignores, decompileIgnores, overrides)
+local function RunDecompilePrepass(cache, O, report, provider, backend, roots, ignores, decompileIgnores, overrides, ignoreNotArchivable)
     if not (getscriptbytecode and sha384) then return false, "bytecode API unavailable" end
-    local scripts = GatherDecompileScripts(roots, ignores, decompileIgnores, O.IgnoreNotArchivable, overrides)
+    local scripts = GatherDecompileScripts(roots, ignores, decompileIgnores, ignoreNotArchivable, overrides)
     local jobs, seen, cached = {}, {}, 0
     local maxScripts = tonumber(O.PrepassMaxScripts) or 6000
     local started = os.clock()
@@ -4657,7 +4657,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
                     if ProgressFill and p.total > 0 then
                         ProgressFill.Size = UDim2.new(p.completed / p.total, 0, 1, 0)
                     end
-                end, NativeDecompiler, DecompilerName, ToSaveList, IgnoreList, DecompileIgnore, InstancesOverrides)
+                end, NativeDecompiler, DecompilerName, ToSaveList, IgnoreList, DecompileIgnore, InstancesOverrides, IgnoreNotArchivable)
             -- A cancelled native call may still run: never start on-demand replacement work.
             prepassStopped = not callOk or (stats and stats.aborted)
             print(callOk and prepassOk and "[saveinstance] Decompile prepass complete."
