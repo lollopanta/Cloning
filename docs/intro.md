@@ -10,7 +10,7 @@ The saveinstance that actually saves your game **the way it looks** — correct 
 
 ```lua
 local Params = {
-    RepoURL = "https://raw.githubusercontent.com/RealSlimShady2000/SaveInstance420Edition/main/",
+    RepoURL = "https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition/raw/branch/main/",
     SSI = "saveinstance",
 }
 
