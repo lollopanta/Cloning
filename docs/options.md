@@ -52,6 +52,8 @@ The [streaming guide](./streaming) explains how to choose an area and check the 
 
 | Option | Default | Behavior |
 |---|---|---|
+| `StreamingPreview` | `false` | Preview only: show the planned area without requests or files. Use `"clear"` to remove. Alias: `PreviewOnly`. |
+| `StreamingPreviewTransparency` | `0.5` | Preview plane transparency, from 0 (opaque) to 1 (invisible). |
 | `SetStreaming` | `false` | Request regions before exporting. Alias: `Streaming`. |
 | `StreamingAreaSize` | `10000` | Width of the request square in studs. |
 | `StreamingRadius` | `512` | Request-grid spacing in studs. |

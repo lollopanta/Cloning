@@ -7,6 +7,65 @@
 -- SaveInstance 420 Edition | https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition
 -- Docs: https://pages.sirmemegithub.com/SaveInstance420Edition/
 
+-- BEGIN STREAMING PLAN
+local function streamNumber(value, fallback, low, high)
+    local n = tonumber(value)
+    if not n or n ~= n or math.abs(n) == math.huge then n = fallback end
+    return math.clamp(n, low, high)
+end
+local function BuildStreamingPlan(O, player)
+    local number = streamNumber
+	local spacing = number(O.StreamingRadius, 512, 64, 4096)
+	local area = number(O.StreamingAreaSize, 10000, 0, 100000)
+	local slices = math.floor(number(O.StreamingSlices, 2, 1, 8))
+	local passes = math.floor(number(O.StreamingPasses, 1, 1, 3))
+	local center = O.StreamingCenter
+	if typeof(center) ~= "Vector3" then
+		center = Vector3.new(0, 50, 0)
+		if player and player.Character then center = player.Character:GetPivot().Position end
+	end
+    if center.X ~= center.X or center.Y ~= center.Y or center.Z ~= center.Z
+        or math.abs(center.X)==math.huge or math.abs(center.Y)==math.huge or math.abs(center.Z)==math.huge then
+        return false, "Invalid StreamingCenter"
+    end
+	local divisions = math.max(1, math.ceil(area / spacing))
+	local width = area == 0 and 1 or divisions + 1
+	local total = width * width * slices * passes
+	if type(O.StreamingPoints) == "table" then total = #O.StreamingPoints end
+	if total == 0 then return false, "StreamingPoints is empty" end
+	if total > 10000 then return false, "Sweep exceeds 10000 requests; reduce area or increase spacing" end
+	local points = table.create(total)
+	if type(O.StreamingPoints) == "table" then
+		for i = 1, total do
+			local point = O.StreamingPoints[i]
+			if typeof(point) ~= "Vector3" or point.X ~= point.X or point.Y ~= point.Y or point.Z ~= point.Z
+				or math.abs(point.X) == math.huge or math.abs(point.Y) == math.huge or math.abs(point.Z) == math.huge then
+				return false, "Invalid StreamingPoints entry " .. i
+			end
+			points[i] = point
+		end
+	else
+	for _ = 1, passes do
+		for xi = 0, width - 1 do
+			for zi = 0, width - 1 do
+				-- Alternate row direction; both outer edges are always included.
+				local zindex = xi % 2 == 0 and zi or (width - 1 - zi)
+				for yi = 0, slices - 1 do
+					points[#points + 1] = center + Vector3.new(
+						area == 0 and 0 or -area / 2 + xi * area / divisions,
+						(yi - (slices - 1) / 2) * spacing * 0.8,
+						area == 0 and 0 or -area / 2 + zindex * area / divisions)
+				end
+			end
+		end
+	end
+	end
+    return {points=points, total=total, center=center, spacing=spacing, area=area,
+        divisions=divisions, width=width, slices=slices, passes=passes, custom=type(O.StreamingPoints)=="table"}
+end
+-- END STREAMING PLAN
+
+local function InitializeSaver()
 local realcheck = true
 local imagonnaaddmorecheck, _ = pcall(function()
 	gethiddenproperty(workspace.Terrain, "SmoothGrid")
@@ -1758,6 +1817,8 @@ local GLOBAL_ENV = getgenv and getgenv() or _G or shared
 --- @field IgnoreSharedStrings boolean -- * **RISKY: FIXES CRASHES (TEMPORARY, TESTED ON ROEXEC ONLY). FEEL FREE TO DISABLE THIS TO SEE IF IT WORKS FOR YOU**. ___Default:___ true
 --- @field SharedStringOverwrite boolean -- * **RISKY:** if the process is not finished aka crashed then none of the affected values will be available. SharedStrings can also be used for ValueTypes that aren't `SharedString`, this behavior is not documented anywhere but makes sense (Could create issues though, due to _potential_ ValueType mix-up, only works on certain types which are all base64 encoded so far). Reason: Allows for potential smaller file size (can also be bigger in some cases). ___Default:___ false
 --- @field TreatUnionsAsParts boolean -- * **RISKY:** Converts all UnionOperations to Parts. Useful if your Executor isn't able to save (read) Unions, because otherwise they will be invisible. ___Default:___ false (except Solara)
+--- @field StreamingPreview boolean|string -- Preview the planned area without streaming or saving. Use "clear" to remove it. Alias: PreviewOnly. Default: false
+--- @field StreamingPreviewTransparency number -- Preview plane transparency from 0 to 1. Default: 0.5
 --- @field SetStreaming boolean -- Requests the configured area before saving. Completeness still depends on replication and retained content. Alias: Streaming. Default: false
 --- @field StreamingAreaSize number -- Square side length around StreamingCenter, in studs. Default: 10000
 --- @field StreamingCenter Vector3|boolean -- Center of the sweep; false uses character position. Default: false
@@ -1858,51 +1919,13 @@ local function StreamEntireMap(O, report)
 		if not n or n ~= n or math.abs(n) == math.huge then n = fallback end
 		return math.clamp(n, low, high)
 	end
-	local spacing = number(O.StreamingRadius, 512, 64, 4096)
-	local area = number(O.StreamingAreaSize, 10000, 0, 100000)
-	local slices = math.floor(number(O.StreamingSlices, 2, 1, 8))
-	local passes = math.floor(number(O.StreamingPasses, 1, 1, 3))
-	local concurrency = math.floor(number(O.StreamingConcurrency, 4, 1, 8))
-	local timeout = number(O.StreamingTimeout, 20, 1, 60)
-	local chunkWait = number(O.StreamingChunkWait, 6, 2, 30)
-	local settle = number(O.StreamingSettleTime, 5, 0, 60)
-	local center = O.StreamingCenter
-	if typeof(center) ~= "Vector3" then
-		center = Vector3.new(0, 50, 0)
-		if player.Character then center = player.Character:GetPivot().Position end
-	end
-	local divisions = math.max(1, math.ceil(area / spacing))
-	local width = area == 0 and 1 or divisions + 1
-	local total = width * width * slices * passes
-	if type(O.StreamingPoints) == "table" then total = #O.StreamingPoints end
-	if total == 0 then return false, "StreamingPoints is empty" end
-	if total > 10000 then return false, "Sweep exceeds 10000 requests; reduce area or increase spacing" end
-	local points = table.create(total)
-	if type(O.StreamingPoints) == "table" then
-		for i = 1, total do
-			local point = O.StreamingPoints[i]
-			if typeof(point) ~= "Vector3" or point.X ~= point.X or point.Y ~= point.Y or point.Z ~= point.Z
-				or math.abs(point.X) == math.huge or math.abs(point.Y) == math.huge or math.abs(point.Z) == math.huge then
-				return false, "Invalid StreamingPoints entry " .. i
-			end
-			points[i] = point
-		end
-	else
-	for _ = 1, passes do
-		for xi = 0, width - 1 do
-			for zi = 0, width - 1 do
-				-- Alternate row direction; both outer edges are always included.
-				local zindex = xi % 2 == 0 and zi or (width - 1 - zi)
-				for yi = 0, slices - 1 do
-					points[#points + 1] = center + Vector3.new(
-						area == 0 and 0 or -area / 2 + xi * area / divisions,
-						(yi - (slices - 1) / 2) * spacing * 0.8,
-						area == 0 and 0 or -area / 2 + zindex * area / divisions)
-				end
-			end
-		end
-	end
-	end
+    local plan, reason = BuildStreamingPlan(O, player)
+    if not plan then return false, reason end
+    local points, total, center, spacing = plan.points, plan.total, plan.center, plan.spacing
+    local concurrency = math.floor(number(O.StreamingConcurrency, 4, 1, 8))
+    local timeout = number(O.StreamingTimeout, 20, 1, 60)
+    local chunkWait = number(O.StreamingChunkWait, 6, 2, 30)
+    local settle = number(O.StreamingSettleTime, 5, 0, 60)
 	local maxTime = number(O.StreamingMaxTime, math.ceil(total / concurrency) * (timeout + chunkWait), 1, 3600)
 	local started = os.clock()
 	local deadline = started + maxTime
@@ -4777,3 +4800,192 @@ end
 --   local synsaveinstance = loadstring(game:HttpGet(RepoURL .. "saveinstance.luau", true), "saveinstance")()
 --   synsaveinstance({ ...options... })
 return synsaveinstance
+end -- InitializeSaver
+
+-- Preview lives outside initialization: no terrain reads, HTTP, files, or decompiler calls.
+local previewEnvironment = getgenv and getgenv() or _G
+local function ClearStreamingPreview()
+    local previous = previewEnvironment.__SSIStreamingPreview
+    if previous then previous:Destroy() end
+end
+local function CreateStreamingPreview(O)
+    ClearStreamingPreview()
+    local players = game:GetService("Players")
+    local player = players.LocalPlayer
+    local plan, reason = BuildStreamingPlan(O, player)
+    assert(plan, reason)
+    local camera = workspace.CurrentCamera
+    assert(camera, "Streaming preview needs a camera")
+    local alpha = streamNumber(O.StreamingPreviewTransparency, 0.5, 0, 1)
+    local root = Instance.new("Folder")
+    root.Name = "SaveInstance_StreamingPreview"
+    root.Archivable = false
+    root.Parent = camera
+    local gui, oldCamera, connection
+    local handle = {Plan=plan, OnlyPreview=true, Transparency=alpha}
+    local removed = false
+    function handle:Destroy()
+        if removed then return end
+        removed = true
+        if connection then connection:Disconnect() end
+        if oldCamera and workspace.CurrentCamera == camera then
+            camera.CameraType = oldCamera.kind
+            camera.CFrame = oldCamera.frame
+            camera.Focus = oldCamera.focus
+        end
+        if gui then gui:Destroy() end
+        root:Destroy()
+        if previewEnvironment.__SSIStreamingPreview == self then
+            previewEnvironment.__SSIStreamingPreview = nil
+        end
+    end
+    previewEnvironment.__SSIStreamingPreview = handle
+    local ok, err = pcall(function()
+        local anchor = Instance.new("Part")
+        anchor.Name = "PreviewAnchor"
+        anchor.Anchored = true
+        anchor.Transparency = 1
+        anchor.CanCollide, anchor.CanTouch, anchor.CanQuery = false, false, false
+        anchor.CastShadow, anchor.Archivable = false, false
+        anchor.Size = Vector3.new(1,1,1)
+        anchor.CFrame = CFrame.new(plan.center)
+        anchor.Parent = root
+        local tint = Color3.fromRGB(125, 195, 235)
+        local function box(name, size, position, transparency, color)
+            local part = Instance.new("BoxHandleAdornment")
+            part.Name = name
+            part.Adornee = anchor
+            part.Size = size
+            part.CFrame = CFrame.new(position - plan.center)
+            part.Transparency = transparency
+            part.Color3 = color or tint
+            part.AlwaysOnTop = true
+            part.ZIndex = 1
+            part.Archivable = false
+            part.Parent = root
+            return part
+        end
+        local low, high = plan.points[1], plan.points[1]
+        for _, point in plan.points do
+            low = Vector3.new(math.min(low.X,point.X),math.min(low.Y,point.Y),math.min(low.Z,point.Z))
+            high = Vector3.new(math.max(high.X,point.X),math.max(high.Y,point.Y),math.max(high.Z,point.Z))
+        end
+        local middle = (low + high) / 2
+        local span = high - low
+        box("RequestedArea", Vector3.new(math.max(span.X,1),0.3,math.max(span.Z,1)), middle, alpha)
+        if not plan.custom and plan.area > 0 then
+            -- Limit decorations independently of the real request count.
+            local step = math.max(1, math.ceil(plan.width / 100))
+            for index=0,plan.width-1,step do
+                local offset = -plan.area/2 + index*plan.area/plan.divisions
+                box("GridX",Vector3.new(0.6,0.6,plan.area),plan.center+Vector3.new(offset,0.5,0),0.15)
+                box("GridZ",Vector3.new(plan.area,0.6,0.6),plan.center+Vector3.new(0,0.5,offset),0.15)
+            end
+            -- The outer boundary remains visible even when grid lines are sampled.
+            for _, sign in {-1,1} do
+                box("BoundaryX",Vector3.new(2,2,plan.area),plan.center+Vector3.new(sign*plan.area/2,1,0),0)
+                box("BoundaryZ",Vector3.new(plan.area,2,2),plan.center+Vector3.new(0,1,sign*plan.area/2),0)
+            end
+        end
+        local markerStep = math.max(1,math.ceil(plan.total / 400))
+        local markers = 0
+        for index=1,plan.total,markerStep do
+            box("RequestPoint",Vector3.new(5,5,5),plan.points[index],0.15,Color3.fromRGB(239,215,126))
+            markers += 1
+        end
+        handle.Markers = markers
+        gui = Instance.new("ScreenGui")
+        gui.Name = "SaveInstanceStreamingPreview"
+        gui.ResetOnSpawn = false
+        gui.DisplayOrder = 2000000000
+        local parent = player and player:FindFirstChildOfClass("PlayerGui")
+        gui.Parent = parent or game:GetService("CoreGui")
+        local panel = Instance.new("Frame")
+        panel.AnchorPoint = Vector2.new(0.5,0)
+        panel.Position = UDim2.new(0.5,0,0,72)
+        panel.Size = UDim2.new(0.9,0,0,170)
+        panel.BackgroundColor3 = Color3.fromRGB(20,24,33)
+        panel.BackgroundTransparency = 0.06
+        panel.BorderSizePixel = 0
+        panel.Parent = gui
+        local limit = Instance.new("UISizeConstraint")
+        limit.MaxSize = Vector2.new(600,170)
+        limit.Parent = panel
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0,10)
+        corner.Parent = panel
+        local text = Instance.new("TextLabel")
+        text.BackgroundTransparency = 1
+        text.Size = UDim2.new(1,-24,0,116)
+        text.Position = UDim2.fromOffset(12,6)
+        text.Font = Enum.Font.Gotham
+        text.TextColor3 = Color3.fromRGB(235,242,248)
+        text.TextSize = 15
+        text.TextWrapped = true
+        text.Text = string.format("STREAMING PREVIEW ONLY - nothing is being saved\nArea: %.0f x %.0f studs | Grid spacing: %.0f studs\n%d requests | %d markers shown\nBlue = planned area; yellow = request points, not confirmed coverage.",span.X,span.Z,plan.spacing,plan.total,markers)
+        text.Parent = panel
+        local function button(label, x)
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(0.5,-18,0,36)
+            b.Position = UDim2.new(x,12,1,-46)
+            b.BackgroundColor3 = Color3.fromRGB(65,93,116)
+            b.TextColor3 = Color3.new(1,1,1)
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 14
+            b.Text = label
+            b.Parent = panel
+            return b
+        end
+        local view = button("View from above",0)
+        view.Activated:Connect(function()
+            if oldCamera then
+                camera.CameraType = oldCamera.kind
+                camera.CFrame, camera.Focus = oldCamera.frame, oldCamera.focus
+                oldCamera = nil
+                view.Text = "View from above"
+            else
+                oldCamera = {kind=camera.CameraType,frame=camera.CFrame,focus=camera.Focus}
+                camera.CameraType = Enum.CameraType.Scriptable
+                camera.CFrame = CFrame.lookAt(middle+Vector3.new(0,math.max(span.X,span.Z,100)*0.85,0),middle,Vector3.new(0,0,-1))
+                camera.Focus = CFrame.new(middle)
+                view.Text = "Restore camera"
+            end
+        end)
+        button("Clear preview",0.5).Activated:Connect(function() handle:Destroy() end)
+        connection = workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function() handle:Destroy() end)
+    end)
+    if not ok then handle:Destroy(); error(err,0) end
+    return handle
+end
+
+local cachedSaver
+return function(options, secondOptions)
+    local source = type(secondOptions)=="table" and secondOptions or options
+    local previewOptions = {}
+    if type(source)=="table" then
+        local names = {streamingpreview="StreamingPreview", previewonly="StreamingPreview",
+            streamingpreviewtransparency="StreamingPreviewTransparency", streamingareasize="StreamingAreaSize",
+            streamingradius="StreamingRadius", streamingcenter="StreamingCenter", streamingslices="StreamingSlices",
+            streamingpasses="StreamingPasses", streamingpoints="StreamingPoints"}
+        for key,value in source do
+            local name = type(key)=="string" and names[string.lower(key)]
+            if name then previewOptions[name]=value end
+        end
+    end
+    if previewOptions.StreamingPreview == "clear" then ClearStreamingPreview(); return end
+    if previewOptions.StreamingPreview == true then
+        assert(not previewEnvironment.__SSISaveInProgress, "Wait for the current export before previewing")
+        return CreateStreamingPreview(previewOptions)
+    end
+    assert(not previewOptions.StreamingPreview, 'StreamingPreview must be true, false, or "clear"')
+    ClearStreamingPreview() -- Helpers and preview camera state must never enter an export.
+    assert(not previewEnvironment.__SSISaveInProgress, "A SaveInstance export is already running")
+    previewEnvironment.__SSISaveInProgress = true
+    local result = table.pack(pcall(function()
+        if not cachedSaver then cachedSaver = InitializeSaver() end
+        return cachedSaver(options, secondOptions)
+    end))
+    previewEnvironment.__SSISaveInProgress = nil
+    if not result[1] then error(result[2],0) end
+    return table.unpack(result,2,result.n)
+end
