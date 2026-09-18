@@ -4543,6 +4543,18 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 			return label
 		end
 		local heading = promoLabel("PromoHeading", 9, 16, 11)
+		heading.Size = UDim2.new(1, -64, 0, 16)
+		local dismiss = Instance.new("TextButton")
+		dismiss.Name = "DismissPromo"
+		dismiss.BackgroundTransparency = 1
+		dismiss.Position = UDim2.new(1, -38, 0, 2)
+		dismiss.Size = UDim2.fromOffset(32, 32)
+		dismiss.Font = Enum.Font.Gotham
+		dismiss.TextSize = 22
+		dismiss.TextColor3 = Color3.fromRGB(160, 172, 187)
+		dismiss.Text = utf8.char(0xD7)
+		dismiss.Parent = banner
+		dismiss.Activated:Connect(function() banner:Destroy() end)
 		local title = promoLabel("PromoTitle", 29, 23, 18)
 		title.Font = Enum.Font.GothamBold
 		local description = promoLabel("PromoDescription", 54, 40, 13)
@@ -4571,7 +4583,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		local index, nextRotation = 1, os.clock() + 8
 		local function showPromo()
 			local promo = promos[index]
-			heading.Text = string.format("FROM SIRMEME  /  AD  %d OF %d", index, #promos)
+			heading.Text = "FROM SIRMEME"
 			title.Text, title.TextColor3 = promo[1], promo[4]
 			description.Text, link.Text = promo[2], promo[3]
 			copy.Text = "Copy URL"
