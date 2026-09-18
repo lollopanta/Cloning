@@ -4115,7 +4115,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 				header ..= '<Meta name="ExplicitAutoJoints">true</Meta>'
 			end
 
-			writefile(placename, header) -- TODO This is sort of useless if writefile will be used at the end (like if AlternativeWritefile and Callback are unused)
+			-- Do not create an output file until serialization has completed.
 		end
 
 		-- TODO Find a better solution for this
@@ -4327,6 +4327,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 				end
 				Callback(totalstr, chunks, totalsize)
 			elseif OPTIONS.AlternativeWritefile and appendfile then
+				writefile(placename, header) -- Initialize segmented output only after all XML is ready.
 				local SEGMENT_SIZE = 4145728 -- Celery has an arbitrary savefile/appendfile size limit of ~4MB for reasons unknown. This is a workaround to save the file in segments.
 
 				local totallen, currentlen = math.ceil(totalsize / SEGMENT_SIZE), 1
