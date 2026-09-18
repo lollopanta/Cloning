@@ -12,15 +12,26 @@ Start with the default export. Once you have a file that opens in Studio, add th
 Run this in your executor. It loads the current script from SirMeme's self-hosted repository and writes a place file.
 
 ```lua
-local saveinstance = loadstring(game:HttpGet(
-    "https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition/raw/branch/main/saveinstance.luau"
-))()
+-- Run this in your executor while in a game.
+local root = "https://sirmemegithub.com/"
+    .. "RealSlimShady2000/SaveInstance420Edition"
+    .. "/raw/branch/main/"
+
+local saveinstance = loadstring(
+    game:HttpGet(root .. "saveinstance.luau")
+)()
 
 saveinstance({
-    SafeMode = false,
-    Debug = true,
+    noscripts = false, -- true: skip script decompilation
+    SetStreaming = false, -- see the streaming guide first
+    DecompilePrepass = false, -- true: decompile concurrently
+    SafeMode = false, -- keep the normal connected save path
+    Debug = true, -- write a troubleshooting log
 })
+-- Filename is automatic: place name + ID + save time.
 ```
+
+No edits are needed for your first save. The example includes scripts; set `noscripts=true` if you only need the map and want to skip decompilation.
 
 The status panel shows the current stage. Leave the client connected until it reports that the save is finished.
 
