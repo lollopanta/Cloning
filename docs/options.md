@@ -13,7 +13,7 @@ Defaults here follow the current script. Some compatibility defaults depend on y
 
 | Option | Default | Behavior |
 |---|---|---|
-| `FilePath` | Automatic | Output name without an extension. |
+| `FilePath` | Automatic | Optional override without an extension. Otherwise uses place name, place ID, and UTC timestamp. |
 | `mode` | `"optimized"` | Select game roots using `"optimized"`, `"full"`, or `"scripts"`. Scripts mode still includes surrounding hierarchy. |
 | `Object` | `false` | Export a particular instance. Normally produces `.rbxmx`. |
 | `IsModel` | `false` | Model output flag; automatically enabled when `Object` is supplied unless explicitly overridden. |

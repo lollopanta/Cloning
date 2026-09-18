@@ -1736,7 +1736,7 @@ local GLOBAL_ENV = getgenv and getgenv() or _G or shared
 --- .ExtraInstances {Instance} -- If used with any invalid mode (like "invalidmode") it will only save these instances. ___Default:___ {}
 --- @field IgnoreProperties table -- Ignores properties by Name. ___Default:___ {}
 --- @field SaveCacheInterval number -- The less the value the more often it saves, but that would mean less performance due to constantly saving. ___Default:___ 0x1600 * 10
---- @field FilePath string -- Must only contain the name of the file, no file extension. ___Default:___ false
+--- @field FilePath string -- Optional output name without an extension. When omitted, uses the place name, place ID, and UTC timestamp. ___Default:___ false
 --- @field Object Instance -- * If provided, saves as .rbxmx (Model file) instead. If Object is game, it will be saved as a .rbxl file. **MUST BE AN INSTANCE REFERENCE, FOR EXAMPLE - *game.Workspace***. `"optimized"` mode is **NOT** supported with this option. If IsModel is set to false then Object specified here will be saved as a place file. ___Default:___ false
 --- @field IsModel boolean -- If Object is specified then sets to true automatically, unless you set it to false. ___Default:___ false
 --- @field NilInstances boolean -- Save instances that aren't Parented (Parented to nil). ___Default:___ false
@@ -3052,15 +3052,22 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		local mode = string.lower(OPTIONS.mode)
 		local tmp = table.clone(OPTIONS.ExtraInstances)
 
-		local PlaceName = game.PlaceId
-
-		pcall(function()
-			PlaceName ..= " " .. service.MarketplaceService:GetProductInfo(PlaceName).Name
-		end)
-
-		local function sanitizeFileName(str)
-			return string.sub(string.gsub(string.gsub(string.gsub(str, "[^%w _]", ""), " +", " "), " +$", ""), 1, 240)
-		end
+        local PlaceName = "Place"
+        pcall(function()
+            local name = service.MarketplaceService:GetProductInfo(game.PlaceId).Name
+            if type(name) == "string" and name ~= "" then PlaceName = name end
+        end)
+        local now = DateTime.now().UnixTimestampMillis
+        local stamp = os.date("!%Y-%m-%d_%H-%M-%S", math.floor(now / 1000))
+            .. string.format("-%03d UTC", now % 1000)
+        local function automaticFileName(modelName)
+            local name = PlaceName .. (modelName and (" - model " .. modelName) or "")
+            -- Preserve Unicode names while removing Windows filename separators.
+            name = name:gsub('[%c<>:"/\\|?*]', ""):gsub("^%s+", ""):gsub("[%s%.]+$", "")
+            if #name > 140 then name = name:sub(1, utf8.offset(name, 0, 141) - 1) end
+            if name == "" then name = "Place" end
+            return name .. " - " .. tostring(game.PlaceId) .. " - " .. stamp
+        end
 
 		if ToSaveInstance then
 			if mode == "optimized" then -- ! NOT supported with Model file mode
@@ -3085,10 +3092,10 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		if IsModel then
 			placename = (
 				FilePath
-					or sanitizeFileName("model " .. PlaceName .. " " .. (ToSaveInstance or tmp[1] or game):GetFullName())
+					or automaticFileName((ToSaveInstance or tmp[1] or game):GetFullName())
 			) .. ".rbxmx"
 		else
-			placename = (FilePath or sanitizeFileName("place " .. PlaceName)) .. ".rbxlx"
+			placename = (FilePath or automaticFileName()) .. ".rbxlx"
 		end
 
 		if GLOBAL_ENV[placename] then

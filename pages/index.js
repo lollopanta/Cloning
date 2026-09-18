@@ -12,7 +12,6 @@ local saveinstance = loadstring(
 )()
 
 saveinstance({
-    FilePath = "My place",
     SafeMode = false,
     Debug = true,
 })`;
@@ -33,7 +32,7 @@ export default function Home() {
      <div className="ssi-actions"><Link className="button button--primary" to="/docs/intro">Make your first save <span aria-hidden="true">↗</span></Link><Link className="ssi-text-link" to="/docs/options">Browse options</Link></div>
      <p className="ssi-credit">Built on UniversalSynSaveInstance. Maintained by SirMeme.</p>
     </div>
-    <div className="ssi-example"><div className="ssi-example-head"><span>START WITH THIS</span><span>Luau / place export</span></div><CodeBlock language="lua">{example}</CodeBlock><p>Writes <code>My place.rbxlx</code> to your executor’s workspace.</p></div>
+    <div className="ssi-example"><div className="ssi-example-head"><span>START WITH THIS</span><span>Luau / place export</span></div><CodeBlock language="lua">{example}</CodeBlock><p>Names the file using the place, place ID, and save time.</p></div>
    </section>
    <div className="ssi-defaults" aria-label="Default behavior"><span><b>Scripts</b> On</span><span><b>Streaming sweep</b> Off</span><span><b>Decompile prepass</b> Off</span><span><b>SafeMode</b> Off</span></div>
    <section className="ssi-guide"><div><p className="ssi-eyebrow">THE GUIDE</p><h2>What are you <br/>working on?</h2><p>No need to learn every option.<br/>Start with the task in front of you.</p></div><div className="ssi-routes">{routes.map(([n,title,body,to])=><Link key={n} to={to} className="ssi-route"><span className="ssi-route-number">{n}</span><span><h3>{title}</h3><p>{body}</p></span><span aria-hidden="true">↗</span></Link>)}</div></section>

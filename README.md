@@ -10,7 +10,6 @@ local saveinstance = loadstring(game:HttpGet(
 ))()
 
 saveinstance({
-    FilePath = "My place",
     SafeMode = false,
     Debug = true,
 })

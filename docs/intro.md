@@ -17,7 +17,6 @@ local saveinstance = loadstring(game:HttpGet(
 ))()
 
 saveinstance({
-    FilePath = "My place",
     SafeMode = false,
     Debug = true,
 })
@@ -29,7 +28,15 @@ The status panel shows the current stage. Leave the client connected until it re
 
 ## 2. Find the file
 
-Open your executor's workspace folder and look for **`My place.rbxlx`**. The `FilePath` option is a name without an extension; the saver adds the extension.
+Open your executor's workspace folder. Automatic filenames contain the **place name, place ID, and UTC save time**, including milliseconds. For example:
+
+```text
+Maple County - 8416011646 - 2026-09-18_01-08-40-123 UTC.rbxlx
+```
+
+The timestamp helps distinguish repeated saves; the ID identifies the place even when names match. Model exports also include the selected instance's name. Characters that cannot appear in a filename are removed.
+
+Leave `FilePath` out to use automatic naming. If you want a fixed name, set `FilePath = "My custom name"` without an extension. A fixed name can overwrite an earlier export.
 
 Open the file in Roblox Studio. Check a nearby building, a distant region, terrain, and a few saved scripts. A successful write confirms that an export was produced. It does not confirm that the client received every part of the map.
 
