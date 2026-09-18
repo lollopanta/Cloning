@@ -2708,6 +2708,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		'<!-- Saved by USSI modded by Robloxscripts.com (Join the Discord) discord.robloxscripts.com --><roblox version="4">'
 
 	local StatusText
+	local StopElapsedClock
 	local ProgressFill -- * Progress-bar fill frame (created in the ShowStatus block below)
 	local saved_count, total_count = 0, 0 -- * Instances serialized vs. estimated total, for the progress bar
 
@@ -4449,9 +4450,9 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		StatusText.Font = Enum.Font.Code
 		StatusText.AnchorPoint = Vector2.new(0.5, 0.5)
 		StatusText.Position = UDim2.fromScale(0.5, 0.5)
-		StatusText.Size = UDim2.new(0.85, 0, 0, 150)
+		StatusText.Size = UDim2.new(0.85, 0, 0, 180)
 		local SizeLimit = Instance.new("UISizeConstraint")
-		SizeLimit.MaxSize = Vector2.new(680, 150)
+		SizeLimit.MaxSize = Vector2.new(680, 180)
 		SizeLimit.Parent = StatusText
 		local Corner = Instance.new("UICorner")
 		Corner.CornerRadius = UDim.new(0, 12)
@@ -4477,6 +4478,36 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		BackendText.Size = UDim2.new(1, -32, 0, 24)
 		BackendText.Text = "Selected decompiler: " .. DecompilerStatus
 		BackendText.Parent = StatusText
+
+		-- A separate label keeps ticking even when a decompiler call is waiting.
+		local ElapsedText = Instance.new("TextLabel")
+		ElapsedText.Name = "ElapsedTime"
+		ElapsedText.BackgroundTransparency = 1
+		ElapsedText.Font = Enum.Font.Code
+		ElapsedText.TextSize = 16
+		ElapsedText.TextColor3 = Color3.fromRGB(220, 229, 238)
+		ElapsedText.Position = UDim2.new(0, 16, 1, -51)
+		ElapsedText.Size = UDim2.new(1, -32, 0, 24)
+		ElapsedText.Text = "Elapsed: 00:00:00"
+		ElapsedText.Parent = StatusText
+		local clockStarted = os.clock()
+		local lastSecond = -1
+		local clockConnection, destroyConnection
+		local function updateElapsedClock()
+			local seconds = math.max(0, math.floor(os.clock() - clockStarted))
+			if seconds ~= lastSecond then
+				lastSecond = seconds
+				ElapsedText.Text = string.format("Elapsed: %02d:%02d:%02d",
+					math.floor(seconds / 3600), math.floor(seconds / 60) % 60, seconds % 60)
+			end
+		end
+		StopElapsedClock = function()
+			updateElapsedClock()
+			if clockConnection then clockConnection:Disconnect(); clockConnection = nil end
+			if destroyConnection then destroyConnection:Disconnect(); destroyConnection = nil end
+		end
+		clockConnection = RunService.Heartbeat:Connect(updateElapsedClock)
+		destroyConnection = StatusText.Destroying:Connect(StopElapsedClock)
 
 		do -- * Save progress bar: a thin track + fill, just under the status text. Parented to StatusText so it's destroyed together with it.
 			local ProgressTrack = Instance.new("Frame")
@@ -4711,6 +4742,8 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		end, function(err)
 			return debug.traceback(err)
 		end)
+
+		if StopElapsedClock then StopElapsedClock() end
 
 		if streamingCleanup then streamingCleanup() end
 

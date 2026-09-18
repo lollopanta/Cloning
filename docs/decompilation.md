@@ -134,3 +134,7 @@ A provider that blocks the executor's scheduler cannot be forcibly interrupted b
 Use `noscripts = true` for an export without decompiled source. `DecompilePrepass = false` only disables the prepass; normal on-demand decompilation remains enabled.
 
 Use `DecompileJobless = true` if you want cached source only, with no new decompiler calls. See the [decompiler options](./options#decompiler-options) for the full set of controls.
+
+### Elapsed time
+
+The status panel shows an **Elapsed: HH:MM:SS** stopwatch below the current stage. It updates while decompilation is waiting, including during the concurrent prepass. It measures the run from when the status panel opens (including streaming), and stops when saving finishes or fails. It is separate from the estimated time remaining.
