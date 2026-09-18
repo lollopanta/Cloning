@@ -19,11 +19,11 @@ saveinstance({
 const routes = [
  ['01', 'Make your first save', 'Run the loader, find the file, and open it in Studio.', '/docs/intro'],
  ['02', 'Fill in streamed regions', 'Choose a request area and check for missing geometry.', '/docs/streaming'],
- ['03', 'Save scripts with Oracle', 'Identify your provider and run a bounded prepass.', '/docs/decompilation'],
+ ['03', 'Choose a decompiler', 'Use your executor, lua.expert, or an optional Oracle setup.', '/docs/decompilation'],
  ['04', 'Track down a bad export', 'Start with the symptom, then make one change at a time.', '/docs/troubleshooting'],
 ];
 export default function Home() {
- return <Layout title="SaveInstance 420 Edition" description="Practical documentation for SaveInstance 420 Edition. Save places, load streamed regions, and configure Oracle decompilation.">
+ return <Layout title="SaveInstance 420 Edition" description="Practical documentation for SaveInstance 420 Edition. Save places, load streamed regions, and choose a decompiler.">
   <main className="ssi-home">
    <section className="ssi-lead">
     <div className="ssi-intro">

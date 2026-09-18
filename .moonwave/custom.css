@@ -78,3 +78,5 @@ a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible {
 .ssi-example pre {margin:0;}
 .ssi-example code {white-space:pre-wrap;overflow-wrap:anywhere;}
 .navbar__search-input::placeholder {color:var(--ssi-muted);opacity:1;}
+
+.prism-code .token.comment {color:#aab7a8!important;font-style:normal!important;}

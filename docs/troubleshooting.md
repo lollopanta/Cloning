@@ -28,7 +28,7 @@ Try `noscripts=true` to isolate geometry and serialization from decompilation. I
 
 ## The wrong decompiler name appears
 
-Check which loader ran last. SaveInstance uses the currently installed hook, not the brand of your executor. Register the hook's name after installing it; see [Oracle setup](./decompilation#use-oracle).
+Check which loader ran last. SaveInstance uses the currently installed hook, not the brand of your executor. Register the hook's name after installing it; see [custom-provider registration](./decompilation#identify-a-custom-provider).
 
 An `Unknown (legacy cache)` label is deliberate. The saver cannot recover the provider for cached text that never recorded it.
 
@@ -36,7 +36,7 @@ An `Unknown (legacy cache)` label is deliberate. The saver cannot recover the pr
 
 Check the source labels and log. A deadline stops the pool from launching further work, and uncached scripts are marked as stopped. Lower `PrepassConcurrency` if the provider is rejecting calls. Increase a deadline only when the provider is still making useful progress.
 
-`PrepassRateGap` controls the built-in HTTP fallback. It does not throttle a custom Oracle hook. A paid-provider error body is not necessarily valid source; check the result if the loader returns error text without throwing.
+`PrepassRateGap` controls the built-in HTTP fallback. It does not throttle a custom provider hook. A provider error body is not necessarily valid source; check the result if the loader returns error text without throwing.
 
 ## The file will not open in Studio
 

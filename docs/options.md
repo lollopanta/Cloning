@@ -28,7 +28,7 @@ Defaults here follow the current script. Some compatibility defaults depend on y
 
 ## Decompiler options
 
-See [Decompile scripts](./decompilation) for provider selection and Oracle registration.
+See [Decompile scripts](./decompilation) for executor-provided decompilers, lua.expert, and optional Oracle setup.
 
 | Option | Default | Behavior |
 |---|---|---|

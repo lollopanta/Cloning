@@ -40,7 +40,7 @@ Open the file in Roblox Studio. Check a nearby building, a distant region, terra
 | What you need | Next step |
 |---|---|
 | More of a streaming map | [Request streamed regions](./streaming) |
-| Faster script decompilation or Oracle | [Set up decompilation](./decompilation) |
+| Decompiler setup or faster script exports | [Set up decompilation](./decompilation) |
 | A model instead of a place | Use the scoped example below |
 | Missing terrain, scripts, or a failed export | [Troubleshoot the result](./troubleshooting) |
 
