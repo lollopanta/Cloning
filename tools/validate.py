@@ -126,6 +126,8 @@ def main(path, top_classes=15):
 
 
 if __name__ == "__main__":
+    # Place names can contain emoji; a Windows console defaults to cp1252.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     n = 15
     if "--classes" in sys.argv:
         n = int(sys.argv[sys.argv.index("--classes") + 1])

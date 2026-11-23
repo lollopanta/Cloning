@@ -252,7 +252,13 @@ return function(version)
 		}
 	end
 
-	local function saveinstance(first, second)
+	local function saveinstance(...)
+		local first, second = ...
+		if select("#", ...) >= 2 and first == nil then
+			-- saveinstance(workspace:FindFirstChild("Gone"), options) must not quietly save the
+			-- whole place instead: that takes minutes, and with a paid decompiler costs requests.
+			error("saveinstance: the instance to save is nil (it does not exist right now)", 2)
+		end
 		if genv.__SaveInstance420Busy then
 			warn("[SaveInstance] A save is already running")
 			return { ok = false, error = "a save is already running" }

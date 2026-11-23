@@ -61,7 +61,7 @@ Pass the instance itself, not its name:
 saveinstance(workspace:WaitForChild("YourModel"))
 ```
 
-This writes `YourModel - <place id> - <time>.rbxmx`. Several at once:
+This writes `YourModel - <place id> - <time>.rbxmx`. If the instance does not exist (for example `FindFirstChild` returned nil), `saveinstance` raises an error instead of saving the whole place. Several at once:
 
 ```lua
 saveinstance({ workspace.BuildingA, workspace.BuildingB }, { FilePath = "Two buildings" })
