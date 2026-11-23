@@ -24,7 +24,7 @@ jobs:
       - name: Install Moonwave
         run: npm install -g moonwave@latest
       - name: Build docs
-        run: moonwave build --code . --out-dir build
+        run: moonwave build --code src --out-dir build
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:

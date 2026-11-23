@@ -5,98 +5,75 @@ title: Make your first save
 
 # Make your first save
 
-Start with the default export. Once you have a file that opens in Studio, add the options your place needs.
-
 ## 1. Load and run
 
-Run this in your executor. It loads the current script from SirMeme's self-hosted repository and writes a place file.
+Run this in your executor while in a game:
 
 ```lua
--- Run this in your executor while in a game.
-local root = "https://sirmemegithub.com/"
-    .. "RealSlimShady2000/SaveInstance420Edition"
-    .. "/raw/branch/main/"
+local saveinstance = loadstring(game:HttpGet(
+    "https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition/raw/branch/main/saveinstance.luau"
+))()
 
-local saveinstance = loadstring(
-    game:HttpGet(root .. "saveinstance.luau")
-)()
-
-saveinstance({
-    noscripts = false, -- true: skip script decompilation
-    SetStreaming = false, -- see the streaming guide first
-    DecompilePrepass = false, -- true: decompile concurrently
-    SafeMode = false, -- keep the normal connected save path
-    Debug = true, -- write a troubleshooting log
-})
--- Filename is automatic: place name + ID + save time.
+saveinstance()
 ```
 
-No edits are needed for your first save. The example includes scripts; set `noscripts=true` if you only need the map and want to skip decompilation.
+The panel at the bottom of the screen shows each stage: decompiling scripts, then saving instances. Stay in the game until it says **Saved**. A big game (hundreds of thousands of instances, thousands of scripts) takes a few minutes, mostly decompiling.
 
-The status panel shows the current stage. Leave the client connected until it reports that the save is finished.
+The console prints a summary when it finishes:
 
-**Normal script decompilation is already on.** Streaming requests and the concurrent decompile prepass are off until you enable them. `SafeMode=false` keeps the normal connected save path; turning it on changes the client state.
+```text
+[SaveInstance] scripts: 5005 decompiled, 907 reused, 5 failed, 74 server-only, 14 without source
+[SaveInstance] saved Blox Fruits - 2753915549 - 2026-11-23 19.32.47.rbxlx: 167018 instances, 177.7 MB in 4m 46s
+```
 
 ## 2. Find the file
 
-Open your executor's workspace folder. Automatic filenames contain the **place name, place ID, and UTC save time**, including milliseconds. For example:
+Look in your executor's `workspace` folder. The name is the place name, place id and UTC time:
 
 ```text
-Maple County - 8416011646 - 2026-09-18_01-08-40-123 UTC.rbxlx
+Blox Fruits - 2753915549 - 2026-11-23 19.32.47.rbxlx
 ```
 
-The timestamp helps distinguish repeated saves; the ID identifies the place even when names match. Model exports also include the selected instance's name. Characters that cannot appear in a filename are removed.
+Set `FilePath = "My save"` for a fixed name instead (no extension; an existing file with that name is replaced).
 
-Leave `FilePath` out to use automatic naming. If you want a fixed name, set `FilePath = "My custom name"` without an extension. A fixed name can overwrite an earlier export.
+Open the file in Roblox Studio. Check a building near you, something far away, the terrain and a few scripts. A finished save means the file was written; it does not prove the client had the whole map (see [streaming](./streaming)).
 
-Open the file in Roblox Studio. Check a nearby building, a distant region, terrain, and a few saved scripts. A successful write confirms that an export was produced. It does not confirm that the client received every part of the map.
-
-`Debug=true` also writes **`saveinstance-debug.txt`** in the workspace. Each run replaces that log, so keep a copy when comparing results.
+`ServerStorage.SaveInstance420` holds a README and anything saved by the extras options.
 
 ## 3. Adjust the next save
 
-| What you need | Next step |
+| You want | Use |
 |---|---|
-| More of a streaming map | [Request streamed regions](./streaming) |
-| Decompiler setup or faster script exports | [Set up decompilation](./decompilation) |
-| A model instead of a place | Use the scoped example below |
-| Missing terrain, scripts, or a failed export | [Troubleshoot the result](./troubleshooting) |
+| The rest of a streaming map | `SetStreaming = true`, see [Load streamed regions](./streaming) |
+| Only the map, fast | `Decompile = false` |
+| One model | `saveinstance(workspace.TheModel)` |
+| Your player's GUI and tools | `IsolateLocalPlayer = true` |
+| Things parented to nil | `NilInstances = true` |
+| A log to share | `Debug = true`, then send `SaveInstance420/debug <time>.log` |
 
-## Save a single model
+Every setting is in the [options reference](./options).
 
-Pass an actual instance, not its name. `Object` selects that instance and normally produces a model file.
+## Save a model
 
-```lua
-saveinstance({
-    Object = workspace:WaitForChild("YourModel"),
-    FilePath = "My model",
-    SafeMode = false,
-})
-```
-
-Replace `YourModel` with the model you want. The output is `My model.rbxmx`.
-
-For several selected instances, pass a list as the first argument:
+Pass the instance itself, not its name:
 
 ```lua
-saveinstance({workspace.BuildingA, workspace.BuildingB}, {
-    FilePath = "Two buildings",
-    SafeMode = false,
-})
+saveinstance(workspace:WaitForChild("YourModel"))
 ```
 
-Replace those instance references with ones that exist in your place. The list form scopes the export to those instances rather than adding the usual game services.
-
-## Save without decompiling
+This writes `YourModel - <place id> - <time>.rbxmx`. Several at once:
 
 ```lua
-saveinstance({
-    FilePath = "Map only",
-    noscripts = true,
-    SafeMode = false,
-})
+saveinstance({ workspace.BuildingA, workspace.BuildingB }, { FilePath = "Two buildings" })
 ```
 
-Script instances can still appear in the file, but the saver does not decompile their source. This is useful when you want to inspect geometry first.
+## Use the result in a script
 
-For the rest of the settings, use the [options reference](./options).
+```lua
+local result = saveinstance({ Decompile = false, ShowStatus = false })
+if result.ok then
+    print("saved", result.path, result.instances, "instances")
+else
+    warn("save failed:", result.error)
+end
+```

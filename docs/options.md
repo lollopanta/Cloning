@@ -5,98 +5,118 @@ title: Options reference
 
 # Options reference
 
-Pass these settings to `saveinstance({ ... })`. Names are case-insensitive. The tables below cover the main controls; the [generated API reference](../api/SynSaveInstance) lists the remaining fields and aliases.
+Pass options as a table: `saveinstance({ Decompile = false })`. Names are case-insensitive. An unknown name prints a warning and is ignored.
 
-Defaults here follow the current script. Some compatibility defaults depend on your executor.
+You can also pass instances directly:
 
-## Output and scope
+```lua
+saveinstance(workspace.Castle)                         -- one model -> .rbxmx
+saveinstance({ workspace.A, workspace.B })             -- several models
+saveinstance(workspace.Castle, { FilePath = "Castle" }) -- instance + options
+```
 
-| Option | Default | Behavior |
+## What to save
+
+| Option | Default | What it does |
 |---|---|---|
-| `FilePath` | Automatic | Optional override without an extension. Otherwise uses place name, place ID, and UTC timestamp. |
-| `mode` | `"optimized"` | Select game roots using `"optimized"`, `"full"`, or `"scripts"`. Scripts mode still includes surrounding hierarchy. |
-| `Object` | `false` | Export a particular instance. Normally produces `.rbxmx`. |
-| `IsModel` | `false` | Model output flag; automatically enabled when `Object` is supplied unless explicitly overridden. |
-| `ExtraInstances` | `{}` | Add instances to the selected roots. For only selected instances, use the [list form](./intro#save-a-single-model). |
-| `IgnoreList` | CoreGui, CorePackages | Skip listed instances or classes. |
-| `IgnoreProperties` | `{}` | Omit named properties. |
-| `IgnoreDefaultProperties` | `true` | Omit properties equal to their class defaults. |
-| `IgnoreNotArchivable` | `true` | Ignore the `Archivable` flag and include non-archivable instances. Set false to respect it. |
-| `NilInstances` | `false` | Include supported instances parented to nil. |
-| `ReadMe` | `true` | Include the saver's readme content in the output. |
-| `Callback` | `false` | Receive serialized data in a callback. The current writer can still create an initial file header. |
+| `Mode` | `"optimized"` | `"optimized"` saves the services a place needs. `"full"` saves every saveable service. `"scripts"` keeps only branches that contain scripts. |
+| `Object` | `false` | An instance or list of instances to save as a model (`.rbxmx`). A service is saved as a folder. `Object = game` is the same as `Mode = "full"`. |
+| `IsModel` | automatic | `true` when `Object` is set. Set `false` to save `Object` as a place. |
+| `IgnoreList` | `{ "CoreGui", "CorePackages" }` | Leave out instances and everything under them. Entries: an instance, a class name, or `ClassName = { "Name", ... }`. `[instance] = false` keeps the instance but drops its children. |
+| `IgnoreProperties` | `{}` | Property names never to write, e.g. `{ "Transparency" }`. |
+| `IgnoreNotArchivable` | `true` | Also save instances with `Archivable = false`. Set `false` to skip them. |
+| `RemovePlayerCharacters` | `true` | Leave player characters out of Workspace. |
+| `NilInstances` | `false` | Save instances parented to nil (needs `getnilinstances`). |
+| `IsolateLocalPlayer` | `false` | Save your Player's contents (PlayerGui, Backpack, ...) as folders. |
+| `IsolateLocalPlayerCharacter` | `false` | Save your character. |
+| `IsolatePlayers` | `false` | Save every Player as folders. |
+| `IsolateStarterPlayer` | `false` | Also save a copy of StarterPlayer's contents as folders. |
+| `ExtraInstances` | `{}` | More instances to include. |
+| `SaveNotCreatable` | `false` | Save instances of classes Studio cannot create (Player, PlayerGui, ...) as folders instead of leaving them out. |
 
-## Decompiler options
+Extras from `NilInstances`, the `Isolate*` options and `ExtraInstances` go into `ServerStorage.SaveInstance420`, where they neither run nor render in Studio.
 
-See [Decompile scripts](./decompilation) for executor-provided decompilers, lua.expert, and optional Oracle setup.
+## Scripts
 
-| Option | Default | Behavior |
+| Option | Default | What it does |
 |---|---|---|
-| `noscripts` | `false` | Disable source decompilation; retain script instances. |
-| `DecompilerName` | Automatic | Display label for the installed hook. Does not select a provider. |
-| `DecompilePrepass` | `false` | Decompile eligible export scripts before serialization. |
-| `PrepassConcurrency` | `4` | Concurrent provider calls; rounded down, maximum eight. |
-| `PrepassMaxTime` | `300` | Overall worker deadline in seconds. |
-| `timeout` | `10` | Per-script deadline in seconds. Alias: `DecompileTimeout`. |
-| `PrepassMaxScripts` | `6000` | Above this unique uncached-job count, skip the prepass and decompile on demand. |
-| `PrepassRateGap` | `0.12` | Minimum spacing in seconds for built-in API fallback requests. Does not affect custom hooks. |
-| `PrepassApiUrl` | `https://api.lua.expert/decompile` | Built-in fallback endpoint. |
-| `scriptcache` | `true` | Reuse decompiled source where bytecode and hash APIs are available. |
-| `DecompileJobless` | `false` | Use cached source only; do not start new provider calls. |
-| `DecompileIgnore` | TextChatService | Skip source for specified instances or classes. |
-| `SaveBytecode` | `false` | Embed readable bytecode as Base64 in the source output. |
+| `Decompile` | `true` | Decompile LocalScripts and ModuleScripts. `false` keeps the script instances with a note. Legacy: `noscripts`. |
+| `DecompileTimeout` | automatic | Seconds per script: 30 for HTTP hooks such as Oracle, 10 for native decompilers. Failed scripts get one more try with three times as long. `0` = no limit. Legacy: `timeout`. |
+| `DecompileConcurrency` | `16` | Requests in flight at once. Halves by itself when the provider says it is rate limited. |
+| `DecompileIgnore` | `{ "TextChatService" }` | Save these scripts (and scripts under these instances) without decompiling them. Same entry format as `IgnoreList`. |
+| `IgnoreDefaultPlayerScripts` | `true` | Leave out the engine's copies of `PlayerModule`, `RbxCharacterSounds`, `ChatScript` and `BubbleChat`, so Studio uses its working defaults. |
+| `ScriptCache` | `true` | Reuse decompiled sources for the rest of the session (same bytecode = same source). Legacy: `scriptcache`. |
+| `DecompileJobless` | `false` | Only use cached sources; decompile nothing new. |
+| `SaveBytecode` | `false` | Append each script's bytecode (base64) to its source. |
+| `DecompilerFallback` | `true` | When the executor has no `decompile()`, send bytecode to the lua.expert API instead. |
+| `DecompilerApiUrl` | lua.expert | Endpoint for the fallback. |
+| `DecompilerApiGap` | `0.12` | Seconds between fallback requests. |
+| `DecompilerName` | automatic | Label written into each source header. Detected automatically for Oracle, lua.expert, Konstant, Medal and native decompilers. |
 
-## Streaming options
+## Properties
 
-The [streaming guide](./streaming) explains how to choose an area and check the result.
-
-| Option | Default | Behavior |
+| Option | Default | What it does |
 |---|---|---|
-| `StreamingPreview` | `false` | Preview only: show the planned area without requests or files. Use `"clear"` to remove. Alias: `PreviewOnly`. |
-| `StreamingPreviewTransparency` | `0.5` | Preview plane transparency, from 0 (opaque) to 1 (invisible). |
-| `SetStreaming` | `false` | Request regions before exporting. Alias: `Streaming`. |
-| `StreamingAreaSize` | `10000` | Width of the request square in studs. |
-| `StreamingRadius` | `512` | Request-grid spacing in studs. |
-| `StreamingCenter` | `false` | Character position, or a supplied `Vector3`. |
-| `StreamingPoints` | `false` | Explicit `Vector3` array instead of the generated grid. |
-| `StreamingSlices` | `2` | Vertical layers. |
-| `StreamingPasses` | `1` | Sweep repetitions. |
-| `StreamingConcurrency` | `4` | Awaited requests in flight; maximum eight. |
-| `StreamingTimeout` | `20` | Per-request deadline in seconds. |
-| `StreamingChunkWait` | `6` | Post-request observation time in seconds. |
-| `StreamingSettleTime` | `5` | Time for background loads to settle after the sweep. |
-| `StreamingMaxTime` | `false` | Automatic overall limit, or a number of seconds. |
-| `StreamingRequireComplete` | `true` | Stop the export after a failed or incomplete sweep. |
-| `StreamingCancel` | `false` | Callback; return true to cancel and stop the export. |
-| `StreamingValidate` | `false` | Coverage callback; return true, or false and a reason. |
+| `IgnoreDefaultProperties` | `true` | Skip properties equal to the class default. Makes files much smaller. |
+| `IgnoreSpecialProperties` | `false` | Never call `gethiddenproperty`. Use only if it crashes your executor: union data and some hidden properties will be missing. |
+| `UseUGCValidationService` | `true` | Use `UGCValidationService` as a last-resort hidden-property reader. |
+| `TreatUnionsAsParts` | `false` | Save unions as Parts. |
+| `IgnoreSharedStrings` | `false` | Leave out SharedString properties (union meshes, tags). Only for executors that crash on them. |
 
-## Appearance and players
+## Streaming
 
-| Option | Default | Behavior |
+See [Load streamed regions](./streaming).
+
+| Option | Default | What it does |
 |---|---|---|
-| `NeutralizeLighting` | `false` | Reset lighting and effects for a brighter saved scene. |
-| `ExportObj` | `false` | Attempt a separate world-space mesh export to `.obj`; depends on mesh API access. |
-| `TreatUnionsAsParts` | Executor-dependent | Save a plain Part representation where union geometry cannot be read. |
-| `RemovePlayerCharacters` | `true` | Exclude player characters. |
-| `IsolateLocalPlayer` | `false` | Isolate the local player's contents in the export. |
-| `IsolateLocalPlayerCharacter` | `false` | Isolate the local character. |
-| `IsolateStarterPlayer` | `false` | Isolate StarterPlayer contents. |
-| `IsolatePlayers` | `false` | Isolate player data. |
+| `SetStreaming` | `false` | Request the map around you before saving. Alias: `Streaming`. |
+| `StreamingAreaSize` | `10000` | Side of the square to sweep, in studs. |
+| `StreamingRadius` | `512` | Grid spacing and settle radius, in studs. |
+| `StreamingCenter` | character | `Vector3` center of the sweep. |
+| `StreamingSlices` | `2` | Vertical layers per grid point. |
+| `StreamingPasses` | `1` | Repeat the sweep (1 to 3). |
+| `StreamingPoints` | `false` | Your own list of `Vector3` points instead of a grid. |
+| `StreamingConcurrency` | `4` | Requests in flight (max 8). |
+| `StreamingTimeout` | `20` | Seconds per request. |
+| `StreamingChunkWait` | `6` | Seconds to wait for a region's parts to stop changing. |
+| `StreamingSettleTime` | `5` | Pause after the sweep for late arrivals. |
+| `StreamingMaxTime` | automatic | Overall limit in seconds (max 3600). |
 
-## Status and compatibility
+## Output and behavior
 
-| Option | Default | Behavior |
+| Option | Default | What it does |
 |---|---|---|
-| `ShowStatus` | `true` | Show the centered stage and progress panel. |
-| `Debug` | `false` | Write `saveinstance-debug.txt` to the executor workspace. |
-| `SafeMode` | `false` | Kick the player and change client state before saving. |
-| `ShutdownWhenDone` | `false` | Shut down the client after a successful save. |
-| `AntiIdle` | `true` | Enable the saver's anti-idle handling. |
-| `IgnoreSpecialProperties` | Executor-dependent | Skip hidden-property reads, reducing the fidelity of some geometry. |
-| `IgnoreSharedStrings` | Usually true | SharedString compatibility control; selected geometry handling is special-cased. |
-| `UseUGCValidationService` | `true` | Allow the UGC validation fallback for property reads. |
-| `AlternativeWritefile` | Usually true | Use the alternate writer; executor compatibility can change the default. |
-| `IgnoreDefaultPlayerScripts` | Usually true | Skip default player scripts; differs on Wave. |
-| `SaveCacheInterval` | `56320` | Buffered-write threshold in bytes. |
+| `FilePath` | automatic | File name without extension. Default: `<place name> - <place id> - <UTC time>`. Legacy: `FileName`. |
+| `Callback` | `false` | A function that receives the file in chunks instead of writing it. |
+| `ShowStatus` | `true` | Show the progress panel. |
+| `ReadMe` | `true` | Add a README ModuleScript to `ServerStorage.SaveInstance420`. |
+| `Debug` | `false` | Write a log to `SaveInstance420/debug <time>.log`. |
+| `NeutralizeLighting` | `false` | Reset the live Lighting to clear midday before saving, so the file does not open dark or foggy. |
+| `SafeMode` | `false` | Disconnect from the server before writing the file and turn off 3D rendering while it runs. Streaming is skipped in SafeMode, since it needs the connection. |
+| `AntiIdle` | `true` | Stop the 20-minute idle kick during long saves. |
+| `ShutdownWhenDone` | `false` | Close the game when the save finishes. |
+| `YieldBudget` | `8` | Milliseconds of work per frame. Raise for speed, lower if the game stutters. |
 
-Change compatibility settings only when they address a specific failing path. Start with the [troubleshooting guide](./troubleshooting) rather than toggling several at once.
+## Result
+
+`saveinstance()` returns a table:
+
+```lua
+{
+    ok = true,
+    path = "Blox Fruits - 2753915549 - 2026-11-23 19.25.00.rbxlx",
+    bytes = 186310284,
+    instances = 167018,
+    scripts = { decompiled = 5005, cached = 907, failed = 5, server = 74, unavailable = 14, total = 6005 },
+    decompiler = "Oracle",
+    decompilerStopped = nil, -- or the provider's message when it stopped answering (expired key, quota)
+    elapsed = 286.8,
+    warnings = {},
+}
+```
+
+On failure: `{ ok = false, error = "...", trace = "..." }`. While a save runs, `getgenv().SaveInstance420Status` holds the current `phase`, `done`, `total`, `bytes` and `elapsed`.
+
+## Retired options
+
+`DecompilePrepass`, `PrepassConcurrency`, `PrepassMaxTime`, `PrepassRateGap`, `PrepassApiUrl`, `PrepassMaxScripts`, `SaveCacheInterval`, `AlternativeWritefile`, `SharedStringOverwrite`, `NilInstancesFixes`, `NotCreatableFixes`, `Anonymous`, `StreamingPreview`, `StreamingRequireComplete`, `StreamingCancel`, `StreamingValidate` and `ExportObj` are not part of 2.0. Retired names are ignored; the `Prepass*` ones are covered by the options under [Scripts](#scripts).

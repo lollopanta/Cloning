@@ -5,53 +5,42 @@ title: Troubleshoot an export
 
 # Troubleshoot an export
 
-Keep the first failing file and its debug log. Change one setting for the next attempt so you can tell what helped.
+Run the failing save again with `Debug = true` and keep `SaveInstance420/debug <time>.log` from your executor's workspace. Change one option at a time.
 
-## The client closes or freezes
+## The save fails or stops
 
-Run a smaller scoped export with `Debug=true`. Save its `saveinstance-debug.txt` before another run overwrites it. Record the executor, place, options, and the last visible stage.
-
-Try `noscripts=true` to isolate geometry and serialization from decompilation. If a map-only save works, investigate the installed provider and its timeout behavior before increasing worker counts.
-
-`SafeMode` is not a neutral crash fix: it kicks the player and changes the live client state. Leave it off when testing the normal connected save path.
-
-## Missing content
-
-| What you see | What to check next |
+| Symptom | Try |
 |---|---|
-| Distant buildings absent or half-built | Compare live landmarks; try a scoped streaming request. See [streaming](./streaming). |
-| Roads or trees above empty terrain | Check terrain in the same locations before and after export. Do not infer completeness from file size. |
-| Objects exist, but textures or sounds fail | Read Studio's output for asset-access errors. Saved references do not grant access to restricted assets. |
-| Server scripts have no source | Server-only source is not available through the client's normal replicated state. |
-| Unions look like plain boxes | Check executor hidden-property support and `TreatUnionsAsParts`. |
-| The saved scene is too dark | Use `NeutralizeLighting=true` only if you want the export's lighting reset. |
+| `[SaveInstance] save failed: ...` in the console | The message names the stage. Send it with the debug log. |
+| It sits on "Decompiling scripts" | A remote `decompile()` hook may be rate-limiting: lower `DecompileConcurrency` (for example 4). Or skip it: `Decompile = false`. |
+| The game stutters a lot while saving | Lower `YieldBudget` (for example 4). |
+| The executor crashes | Try `IgnoreSpecialProperties = true` (no `gethiddenproperty` calls), then `IgnoreSharedStrings = true`. Each removes some data from the save. |
+| "A save is already running" | Wait for the first one, or rejoin if it crashed mid-save. |
 
-## The wrong decompiler name appears
+A save that failed deletes its partial file.
 
-Check which loader ran last. SaveInstance uses the currently installed hook, not the brand of your executor. Register the hook's name after installing it; see [custom-provider registration](./decompilation#identify-a-custom-provider).
+## Missing or wrong content
 
-An `Unknown (legacy cache)` label is deliberate. The saver cannot recover the provider for cached text that never recorded it.
+| What you see | Why, and what to do |
+|---|---|
+| Distant areas missing | The game streams. Use `SetStreaming = true`, see [streaming](./streaming). |
+| Unions are plain boxes | Unions made with newer Studio keep their shape in `SolidMeshHolder`, which no executor can read. Nothing on the client can recover those. `TreatUnionsAsParts = true` turns them into Parts instead. |
+| MeshParts are grey boxes | The mesh asset is private to the game's owner, so Studio cannot download it. |
+| Textures or sounds missing | Same cause: asset permissions. The save keeps the asset ids. |
+| Server scripts only contain a note | Server code never reaches the client. |
+| A script says `decompile failed` | See [Decompile scripts](./decompilation#when-decompiling-fails). |
+| The place opens dark or foggy | That is the game's real lighting. `NeutralizeLighting = true` resets it before saving. |
+| My character will not spawn in Studio | Move the scripts out of StarterPlayer, then run `game:GetService("Players").CharacterAutoLoads = true` in the command bar. |
+| The camera will not move | `workspace.CurrentCamera.CameraType = Enum.CameraType.Fixed`, or delete the Camera. |
 
-## Decompilation stops partway through
+## Check a file without Studio
 
-Check the source labels and log. A deadline stops the pool from launching further work, and uncached scripts are marked as stopped. Lower `PrepassConcurrency` if the provider is rejecting calls. Increase a deadline only when the provider is still making useful progress.
+The repository has a validator that checks structure (unique referents, references, SharedStrings, base64) and prints what is in the file:
 
-`PrepassRateGap` controls the built-in HTTP fallback. It does not throttle a custom provider hook. A provider error body is not necessarily valid source; check the result if the loader returns error text without throwing.
+```bash
+python tools/validate.py "path/to/save.rbxlx"
+```
 
-## The file will not open in Studio
+## Report a problem
 
-Confirm that the save reported success and that the file has finished writing. Keep the file and debug log. A partial file left by a failed run is not a valid completed export.
-
-Test a small model next. If that opens, widen the export until the failure becomes reproducible. Avoid repeatedly exporting a huge place before you have a smaller failing case.
-
-## Share a useful report
-
-Include:
-
-- Place name or ID, executor name, and saver revision.
-- The exact options you used.
-- Whether the client closed, froze, or reported a Lua error.
-- The last stage and relevant lines from `saveinstance-debug.txt`.
-- A screenshot or named landmark for missing geometry.
-
-Remove provider keys and other credentials before posting logs. Report issues on the [self-hosted repository](https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition/issues).
+Include the place, your executor, the options you used, what went wrong, and the debug log. Report issues on the [self-hosted repository](https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition/issues).
