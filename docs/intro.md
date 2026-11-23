@@ -17,6 +17,8 @@ local saveinstance = loadstring(game:HttpGet(
 saveinstance()
 ```
 
+SaveInstance tracks execution data (run statistics) for robloxscripts.com: versions, executor, game ids and counts of the features used, never your account name or id. To turn it off, run `getgenv().RSOPS_OFF = true` before the loader. See [Run statistics and privacy](./privacy).
+
 The panel at the bottom of the screen shows each stage: decompiling scripts, then saving instances. Stay in the game until it says **Saved**. A big game (hundreds of thousands of instances, thousands of scripts) takes a few minutes, mostly decompiling.
 
 The console prints a summary when it finishes:

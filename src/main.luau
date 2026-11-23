@@ -36,6 +36,7 @@ local Serialize = require("serialize")
 local Writer = require("writer")
 local Streaming = require("streaming")
 local UI = require("ui")
+local Telemetry = require("telemetry")
 
 local Players = game:GetService("Players")
 
@@ -115,8 +116,10 @@ local function startAntiIdle()
 	end)
 end
 
-return function(version)
+-- ops: the robloxscripts.com Script Ops handle from the bundle's prelude (nil when tracking is off).
+return function(version, ops)
 	local genv = (getgenv and getgenv()) or _G
+	Telemetry.attach(ops)
 
 	if genv.__SaveInstance420Dev then
 		-- Development only: lets tools/live.mjs tests reach individual modules.
@@ -155,6 +158,7 @@ return function(version)
 		end
 		local decompiler = Scripts.begin(options)
 		Log.info("decompiler: " .. decompiler)
+		Telemetry.event("decompiler", Scripts.providerKind())
 
 		local antiIdle = options.AntiIdle and startAntiIdle() or nil
 		if antiIdle then
@@ -257,9 +261,11 @@ return function(version)
 		if select("#", ...) >= 2 and first == nil then
 			-- saveinstance(workspace:FindFirstChild("Gone"), options) must not quietly save the
 			-- whole place instead: that takes minutes, and with a paid decompiler costs requests.
+			Telemetry.event("result", "nil_target")
 			error("saveinstance: the instance to save is nil (it does not exist right now)", 2)
 		end
 		if genv.__SaveInstance420Busy then
+			Telemetry.event("result", "busy")
 			warn("[SaveInstance] A save is already running")
 			return { ok = false, error = "a save is already running" }
 		end
@@ -273,6 +279,17 @@ return function(version)
 			error(options, 2)
 		end
 		Log.setDebug(options.Debug)
+
+		-- Run statistics: fixed words only, never paths, names or option values typed by the user.
+		local mode = (options.Mode == "optimized" or options.Mode == "full" or options.Mode == "scripts") and options.Mode or "other"
+		Telemetry.event("save", options.Object and (options.IsModel and "model" or "object_as_place") or mode)
+		for option, word in { SetStreaming = "streaming", NilInstances = "nil_instances", IsolateLocalPlayer = "isolate_player",
+			IsolatePlayers = "isolate_players", SafeMode = "safe_mode", NeutralizeLighting = "neutralize_lighting",
+			SaveBytecode = "save_bytecode" } do
+			if options[option] == true then
+				Telemetry.event("option", word)
+			end
+		end
 
 		local status = { version = version, phase = "starting", done = 0, total = 0, bytes = 0, elapsed = 0 }
 		genv.SaveInstance420Status = status
@@ -292,7 +309,12 @@ return function(version)
 			pcall(Env.setthreadidentity, previousIdentity)
 		end
 
+		Telemetry.event("result", ok and "ok" or "failed")
+		if ok and result.decompilerStopped then
+			Telemetry.event("decompiler_stopped")
+		end
 		if not ok then
+			Telemetry.error(result.message, "save")
 			Log.warn("save failed: " .. result.message)
 			Log.debug(result.trace)
 			result = { ok = false, error = result.message, trace = result.trace, warnings = Log.warnings }
@@ -322,5 +344,6 @@ return function(version)
 		return result
 	end
 
+	Telemetry.ready() -- loaded without errors
 	return saveinstance
 end

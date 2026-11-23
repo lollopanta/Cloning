@@ -7,6 +7,7 @@
 // Environment:
 //   SSI_BRIDGE     ExecutorMCP bridge (default http://127.0.0.1:16384)
 //   SSI_WORKSPACE  executor workspace folder (default: Volt's, auto-detected)
+//   SSI_OPS=1      let `save` runs report run statistics to robloxscripts.com (off by default)
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -47,8 +48,14 @@ async function check() {
 async function save(optionsLua) {
   await check();
   const options = optionsLua || "{}";
+  // Development runs stay out of the robloxscripts.com run statistics (SSI_OPS=1 includes them).
+  // The reporter checks RSOPS_OFF while the bundle loads, so the user's own value comes back after.
+  const opsOff = process.env.SSI_OPS === "1" ? "nil" : "true";
   await luau(`
+    local previousOff = getgenv().RSOPS_OFF
+    if ${opsOff} then getgenv().RSOPS_OFF = true end
     local saveinstance = ${LOAD}()
+    getgenv().RSOPS_OFF = previousOff
     getgenv().SSI_LIVE_RESULT = nil
     local options = ${options}
     options.FilePath = options.FilePath or "ssi-dev/live"

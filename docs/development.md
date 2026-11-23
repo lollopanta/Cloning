@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 title: Develop SaveInstance
 ---
 
@@ -25,8 +25,10 @@ title: Develop SaveInstance
 | `src/writer.luau` | Chunked file output. |
 | `src/streaming.luau` | Streaming sweep. |
 | `src/ui.luau` | Status panel. |
+| `src/telemetry.luau` | Run statistics: load success, feature and error counts for robloxscripts.com. |
+| `src/prelude/telemetry.luau` | Not a module: the Script Ops line, pasted first in the bundle under its disclosure comment. |
 
-Modules use `require("name")`; `tools/bundle.mjs` wraps each one in a function and resolves those calls inside the single output file.
+Modules use `require("name")`; `tools/bundle.mjs` wraps each one in a function and resolves those calls inside the single output file. Files in `src/prelude/` are copied verbatim to the top of the bundle instead, before any module runs. The bundle passes the `ops` handle they define to `main`, and reports a failed load as `ready(false, "load_error")`. Delete the prelude to build without run statistics.
 
 ## Build
 
@@ -58,7 +60,7 @@ node tools/live.mjs save "{ Object = workspace:FindFirstChildWhichIsA('Model') }
 node tools/live.mjs eval "return #game:GetDescendants()"
 ```
 
-`SSI_WORKSPACE` overrides the executor workspace folder (Volt's is detected automatically) and `SSI_BRIDGE` the bridge address.
+`SSI_WORKSPACE` overrides the executor workspace folder (Volt's is detected automatically) and `SSI_BRIDGE` the bridge address. Development saves are kept out of the run statistics (the script sets `RSOPS_OFF` only while the bundle loads); set `SSI_OPS=1` to include them.
 
 `python tools/validate.py <file>` checks a saved file: unique referents, resolving Refs and SharedString keys, no duplicate properties, valid base64, plus a census of classes and value types.
 

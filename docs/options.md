@@ -117,6 +117,10 @@ See [Load streamed regions](./streaming).
 
 On failure: `{ ok = false, error = "...", trace = "..." }`. While a save runs, `getgenv().SaveInstance420Status` holds the current `phase`, `done`, `total`, `bytes` and `elapsed`.
 
+## Run statistics
+
+Run statistics for robloxscripts.com are not a `saveinstance()` option: they start when the script loads. Turn them off with `getgenv().RSOPS_OFF = true` before loading, or with `rsops/optout.txt` in your executor's workspace. See [Run statistics and privacy](./privacy).
+
 ## Retired options
 
 `DecompilePrepass`, `PrepassConcurrency`, `PrepassMaxTime`, `PrepassRateGap`, `PrepassApiUrl`, `PrepassMaxScripts`, `SaveCacheInterval`, `AlternativeWritefile`, `SharedStringOverwrite`, `NilInstancesFixes`, `NotCreatableFixes`, `Anonymous`, `StreamingPreview`, `StreamingRequireComplete`, `StreamingCancel`, `StreamingValidate` and `ExportObj` are not part of 2.0. Retired names are ignored; the `Prepass*` ones are covered by the options under [Scripts](#scripts).

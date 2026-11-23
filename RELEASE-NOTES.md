@@ -21,6 +21,7 @@ SaveInstance 420 Edition is rebuilt from scratch as small modules in `src/`, bun
 - Extras (nil instances, isolated players, extra instances, readme) are saved under `ServerStorage.SaveInstance420`.
 - The result of `saveinstance()` is a table (`ok`, `path`, `bytes`, `instances`, `scripts`, `warnings`, ...), and live progress is published in `getgenv().SaveInstance420Status`.
 - Debug logs are written to `SaveInstance420/debug <time>.log`.
+- **Run statistics:** SaveInstance tracks execution data for robloxscripts.com (Script Ops): versions, executor, game ids, device type, and counts of save types, decompiler kinds, options and errors, with a check-in every 5 minutes. It never sends account names or ids, and never anything from the saved place. Turn it off with `getgenv().RSOPS_OFF = true` or `rsops/optout.txt` (see `docs/privacy.md`).
 
 ## Not carried over yet
 

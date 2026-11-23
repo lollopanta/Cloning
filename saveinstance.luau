@@ -2,8 +2,22 @@
 -- SaveInstance 420 Edition 2.0.0-dev
 -- https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition
 -- Built from src/ by tools/bundle.mjs. Edit the modules in src/, not this file.
+--
+-- NOTICE: this script tracks execution data (run statistics) for robloxscripts.com.
+-- The RUN STATISTICS block below says what is sent and how to turn it off.
 
 local __SSI_VERSION = "2.0.0-dev"
+-- RUN STATISTICS: SaveInstance 420 Edition tracks execution data for robloxscripts.com (Script Ops).
+-- Each run sends SaveInstance's version, Roblox's version, your executor, the game's ids, device and OS
+-- type, start-up time, and counts of the SaveInstance features used and errors hit, then checks in
+-- every 5 minutes while the game runs. It never sends your Roblox user id, name or display name, the
+-- server's JobId or hardware ids. The reporter runs on its own thread: if robloxscripts.com is down,
+-- saving still works.
+-- Turn it off: set getgenv().RSOPS_OFF = true before loading SaveInstance, or create the file
+-- rsops/optout.txt in your executor's workspace. Details: https://robloxscripts.com/script-ops
+local ops = setmetatable({ id = "ops_2tlgdq6bpr5k", ref = "6a23e92ced790a687ae2c801", version = __SSI_VERSION }, { q = {}, __index = function(t, k) return function(...) local q = getmetatable(t).q; if q and #q < 64 then q[#q + 1] = { k, ... } end end end });
+task.spawn(pcall, function() local g = getgenv and getgenv() or {}; if g.RSOPS_OFF == true or g.RSOps and g.RSOps._off == true or isfile and select(2, pcall(isfile, "rsops/optout.txt")) == true then return end; loadstring(game:HttpGet("https://robloxscripts.com/ops/v1.lua"))(ops) end);
+
 local __modules, __loaded = {}, {}
 local function require(name)
 	local cached = __loaded[name]
@@ -1163,6 +1177,7 @@ local Serialize = require("serialize")
 local Writer = require("writer")
 local Streaming = require("streaming")
 local UI = require("ui")
+local Telemetry = require("telemetry")
 
 local Players = game:GetService("Players")
 
@@ -1242,8 +1257,10 @@ local function startAntiIdle()
 	end)
 end
 
-return function(version)
+-- ops: the robloxscripts.com Script Ops handle from the bundle's prelude (nil when tracking is off).
+return function(version, ops)
 	local genv = (getgenv and getgenv()) or _G
+	Telemetry.attach(ops)
 
 	if genv.__SaveInstance420Dev then
 		-- Development only: lets tools/live.mjs tests reach individual modules.
@@ -1282,6 +1299,7 @@ return function(version)
 		end
 		local decompiler = Scripts.begin(options)
 		Log.info("decompiler: " .. decompiler)
+		Telemetry.event("decompiler", Scripts.providerKind())
 
 		local antiIdle = options.AntiIdle and startAntiIdle() or nil
 		if antiIdle then
@@ -1384,9 +1402,11 @@ return function(version)
 		if select("#", ...) >= 2 and first == nil then
 			-- saveinstance(workspace:FindFirstChild("Gone"), options) must not quietly save the
 			-- whole place instead: that takes minutes, and with a paid decompiler costs requests.
+			Telemetry.event("result", "nil_target")
 			error("saveinstance: the instance to save is nil (it does not exist right now)", 2)
 		end
 		if genv.__SaveInstance420Busy then
+			Telemetry.event("result", "busy")
 			warn("[SaveInstance] A save is already running")
 			return { ok = false, error = "a save is already running" }
 		end
@@ -1400,6 +1420,17 @@ return function(version)
 			error(options, 2)
 		end
 		Log.setDebug(options.Debug)
+
+		-- Run statistics: fixed words only, never paths, names or option values typed by the user.
+		local mode = (options.Mode == "optimized" or options.Mode == "full" or options.Mode == "scripts") and options.Mode or "other"
+		Telemetry.event("save", options.Object and (options.IsModel and "model" or "object_as_place") or mode)
+		for option, word in { SetStreaming = "streaming", NilInstances = "nil_instances", IsolateLocalPlayer = "isolate_player",
+			IsolatePlayers = "isolate_players", SafeMode = "safe_mode", NeutralizeLighting = "neutralize_lighting",
+			SaveBytecode = "save_bytecode" } do
+			if options[option] == true then
+				Telemetry.event("option", word)
+			end
+		end
 
 		local status = { version = version, phase = "starting", done = 0, total = 0, bytes = 0, elapsed = 0 }
 		genv.SaveInstance420Status = status
@@ -1419,7 +1450,12 @@ return function(version)
 			pcall(Env.setthreadidentity, previousIdentity)
 		end
 
+		Telemetry.event("result", ok and "ok" or "failed")
+		if ok and result.decompilerStopped then
+			Telemetry.event("decompiler_stopped")
+		end
 		if not ok then
+			Telemetry.error(result.message, "save")
 			Log.warn("save failed: " .. result.message)
 			Log.debug(result.trace)
 			result = { ok = false, error = result.message, trace = result.trace, warnings = Log.warnings }
@@ -1449,6 +1485,7 @@ return function(version)
 		return result
 	end
 
+	Telemetry.ready() -- loaded without errors
 	return saveinstance
 end
 end
@@ -3202,12 +3239,12 @@ end
 local state
 
 -- Provider identification ------------------------------------------------------------------
-local KNOWN_PROVIDERS = { -- substring of a URL or name inside the hook -> label
-	{ "oracle.mshq.dev", "Oracle" },
-	{ "oracle", "Oracle" },
-	{ "lua.expert", "lua.expert" },
-	{ "konstant", "Konstant" },
-	{ "medal", "Medal" },
+local KNOWN_PROVIDERS = { -- substring of a URL or name inside the hook -> label, kind (for run stats)
+	{ "oracle.mshq.dev", "Oracle", "oracle" },
+	{ "oracle", "Oracle", "oracle" },
+	{ "lua.expert", "lua.expert", "lua_expert" },
+	{ "konstant", "Konstant", "konstant" },
+	{ "medal", "Medal", "medal" },
 }
 
 local function currentDecompile()
@@ -3247,29 +3284,31 @@ local function hookStrings(f)
 	return strings
 end
 
--- Returns the label for the installed decompile() and whether it is a native C function.
+-- Returns the label for the installed decompile(), whether it is a native C function, and a
+-- fixed kind word for run statistics (a user-chosen name is never sent).
 local function identify(f, options)
 	local native = isNative(f)
+	local namedKind = native and "native" or "named_hook"
 	if type(options.DecompilerName) == "string" and options.DecompilerName ~= "" then
-		return options.DecompilerName, native
+		return options.DecompilerName, native, namedKind
 	end
 	-- Registration convention kept from 1.x:
 	-- getgenv().__SaveInstanceDecompiler = { Name = "Oracle", Function = getgenv().decompile }
 	local registered = genv.__SaveInstanceDecompiler
 	if type(registered) == "table" and registered.Function == f and type(registered.Name) == "string" then
-		return registered.Name, native
+		return registered.Name, native, namedKind
 	end
 	if native then
-		return (string.match(Env.executor, "^(%S+)") or "executor") .. " decompile()", true
+		return (string.match(Env.executor, "^(%S+)") or "executor") .. " decompile()", true, "native"
 	end
 	for _, text in hookStrings(f) do
 		for _, provider in KNOWN_PROVIDERS do
 			if string.find(text, provider[1], 1, true) then
-				return provider[2], false
+				return provider[2], false, provider[3]
 			end
 		end
 	end
-	return "decompile() hook", false
+	return "decompile() hook", false, "hook"
 end
 
 -- Result checking --------------------------------------------------------------------------
@@ -3385,10 +3424,12 @@ function Scripts.begin(options)
 		stats = { total = 0, decompiled = 0, cached = 0, failed = 0, server = 0, unavailable = 0 },
 	}
 	local hook = currentDecompile()
+	state.kind = "none"
 	if not options.Decompile then
-		state.label = "off (Decompile = false)"
+		state.label, state.kind = "off (Decompile = false)", "off"
 	elseif hook then
-		local label, native = identify(hook, options)
+		local label, native, kind = identify(hook, options)
+		state.kind = kind
 		state.backend = function(script)
 			return hook(script)
 		end
@@ -3398,6 +3439,7 @@ function Scripts.begin(options)
 		state.timeout = tonumber(options.DecompileTimeout) or (native and 10 or 30)
 	elseif options.DecompilerFallback and Env.request and Env.getscriptbytecode then
 		state.backend, state.spawn, state.concurrency, state.label = apiDecompile, false, 1, "lua.expert API"
+		state.kind = "lua_expert_api"
 		state.timeout = tonumber(options.DecompileTimeout) or 30
 	else
 		state.label = "unavailable on this executor"
@@ -3411,6 +3453,11 @@ end
 
 function Scripts.stoppedReason()
 	return state and state.stopped
+end
+
+-- A fixed word naming the decompiler kind, for run statistics.
+function Scripts.providerKind()
+	return state and state.kind or "none"
 end
 
 -- "client" scripts carry bytecode on this client; "server" ones never do.
@@ -4154,6 +4201,43 @@ end
 return Streaming
 end
 
+__modules["telemetry"] = function()
+-- Run statistics for robloxscripts.com (Script Ops). What is sent and how to turn it off is
+-- described at the top of the built saveinstance.luau (from src/prelude/telemetry.luau) and in
+-- docs/privacy.md. Only counts are reported from here: no place content and no player names.
+local Telemetry = {}
+
+local ops
+
+function Telemetry.attach(handle)
+	ops = handle
+end
+
+local function call(method, ...)
+	if ops ~= nil then
+		pcall(function(...)
+			ops[method](...)
+		end, ...)
+	end
+end
+
+-- Loaded successfully (ok = false with a short reason when it did not).
+function Telemetry.ready(ok, reason)
+	call("ready", ok, reason)
+end
+
+-- Counts one use of a feature. name: lowercase letters, digits and _; value: a short word.
+function Telemetry.event(name, value)
+	call("event", name, value)
+end
+
+function Telemetry.error(err, where)
+	call("error", err, where)
+end
+
+return Telemetry
+end
+
 __modules["ui"] = function()
 -- On-screen status panel. Lives in gethui()/CoreGui so it is never part of a save.
 local Env = require("env")
@@ -4429,4 +4513,14 @@ end
 return Writer
 end
 
-return require("main")(__SSI_VERSION)
+local __ok, __saveinstance = pcall(function()
+	return require("main")(__SSI_VERSION, ops)
+end)
+if not __ok then
+	pcall(function()
+		ops.ready(false, "load_error")
+		ops.error(__saveinstance, "load")
+	end)
+	error(__saveinstance, 0)
+end
+return __saveinstance

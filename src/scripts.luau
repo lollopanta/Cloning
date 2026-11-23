@@ -22,12 +22,12 @@ end
 local state
 
 -- Provider identification ------------------------------------------------------------------
-local KNOWN_PROVIDERS = { -- substring of a URL or name inside the hook -> label
-	{ "oracle.mshq.dev", "Oracle" },
-	{ "oracle", "Oracle" },
-	{ "lua.expert", "lua.expert" },
-	{ "konstant", "Konstant" },
-	{ "medal", "Medal" },
+local KNOWN_PROVIDERS = { -- substring of a URL or name inside the hook -> label, kind (for run stats)
+	{ "oracle.mshq.dev", "Oracle", "oracle" },
+	{ "oracle", "Oracle", "oracle" },
+	{ "lua.expert", "lua.expert", "lua_expert" },
+	{ "konstant", "Konstant", "konstant" },
+	{ "medal", "Medal", "medal" },
 }
 
 local function currentDecompile()
@@ -67,29 +67,31 @@ local function hookStrings(f)
 	return strings
 end
 
--- Returns the label for the installed decompile() and whether it is a native C function.
+-- Returns the label for the installed decompile(), whether it is a native C function, and a
+-- fixed kind word for run statistics (a user-chosen name is never sent).
 local function identify(f, options)
 	local native = isNative(f)
+	local namedKind = native and "native" or "named_hook"
 	if type(options.DecompilerName) == "string" and options.DecompilerName ~= "" then
-		return options.DecompilerName, native
+		return options.DecompilerName, native, namedKind
 	end
 	-- Registration convention kept from 1.x:
 	-- getgenv().__SaveInstanceDecompiler = { Name = "Oracle", Function = getgenv().decompile }
 	local registered = genv.__SaveInstanceDecompiler
 	if type(registered) == "table" and registered.Function == f and type(registered.Name) == "string" then
-		return registered.Name, native
+		return registered.Name, native, namedKind
 	end
 	if native then
-		return (string.match(Env.executor, "^(%S+)") or "executor") .. " decompile()", true
+		return (string.match(Env.executor, "^(%S+)") or "executor") .. " decompile()", true, "native"
 	end
 	for _, text in hookStrings(f) do
 		for _, provider in KNOWN_PROVIDERS do
 			if string.find(text, provider[1], 1, true) then
-				return provider[2], false
+				return provider[2], false, provider[3]
 			end
 		end
 	end
-	return "decompile() hook", false
+	return "decompile() hook", false, "hook"
 end
 
 -- Result checking --------------------------------------------------------------------------
@@ -205,10 +207,12 @@ function Scripts.begin(options)
 		stats = { total = 0, decompiled = 0, cached = 0, failed = 0, server = 0, unavailable = 0 },
 	}
 	local hook = currentDecompile()
+	state.kind = "none"
 	if not options.Decompile then
-		state.label = "off (Decompile = false)"
+		state.label, state.kind = "off (Decompile = false)", "off"
 	elseif hook then
-		local label, native = identify(hook, options)
+		local label, native, kind = identify(hook, options)
+		state.kind = kind
 		state.backend = function(script)
 			return hook(script)
 		end
@@ -218,6 +222,7 @@ function Scripts.begin(options)
 		state.timeout = tonumber(options.DecompileTimeout) or (native and 10 or 30)
 	elseif options.DecompilerFallback and Env.request and Env.getscriptbytecode then
 		state.backend, state.spawn, state.concurrency, state.label = apiDecompile, false, 1, "lua.expert API"
+		state.kind = "lua_expert_api"
 		state.timeout = tonumber(options.DecompileTimeout) or 30
 	else
 		state.label = "unavailable on this executor"
@@ -231,6 +236,11 @@ end
 
 function Scripts.stoppedReason()
 	return state and state.stopped
+end
+
+-- A fixed word naming the decompiler kind, for run statistics.
+function Scripts.providerKind()
+	return state and state.kind or "none"
 end
 
 -- "client" scripts carry bytecode on this client; "server" ones never do.

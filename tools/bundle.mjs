@@ -5,20 +5,32 @@
 //
 // usage: node tools/bundle.mjs [--deploy <executor workspace dir>]
 //   --deploy copies the bundle to <dir>/ssi-dev/saveinstance.luau for live testing.
-import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, copyFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, copyFileSync, existsSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = join(ROOT, "src");
+// Files in src/prelude/ are not modules: they are pasted verbatim at the very top of the
+// bundle, before any module code runs (the run-statistics line must come first).
+const PRELUDE = join(SRC, "prelude");
 const OUT = join(ROOT, "saveinstance.luau");
 const ENTRY = "main";
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
     const full = join(dir, name);
+    if (full === PRELUDE) return [];
     return statSync(full).isDirectory() ? walk(full) : full.endsWith(".luau") ? [full] : [];
   });
+}
+
+const prelude = existsSync(PRELUDE)
+  ? readdirSync(PRELUDE).filter((n) => n.endsWith(".luau")).sort().map((n) => readFileSync(join(PRELUDE, n), "utf8").replace(/\s+$/, ""))
+  : [];
+const tracked = prelude.length > 0;
+if (tracked && !prelude.some((source) => /^local ops = /m.test(source))) {
+  throw new Error("src/prelude must define `local ops = ...` (the Script Ops handle passed to main)");
 }
 
 const version = JSON.parse(readFileSync(join(ROOT, "version.json"), "utf8")).version;
@@ -43,8 +55,16 @@ const parts = [
   `-- SaveInstance 420 Edition ${version}`,
   "-- https://sirmemegithub.com/RealSlimShady2000/SaveInstance420Edition",
   "-- Built from src/ by tools/bundle.mjs. Edit the modules in src/, not this file.",
+  ...(tracked
+    ? [
+        "--",
+        "-- NOTICE: this script tracks execution data (run statistics) for robloxscripts.com.",
+        "-- The RUN STATISTICS block below says what is sent and how to turn it off.",
+      ]
+    : []),
   "",
   "local __SSI_VERSION = " + JSON.stringify(version),
+  ...prelude.flatMap((source) => [source, ""]),
   "local __modules, __loaded = {}, {}",
   "local function require(name)",
   "\tlocal cached = __loaded[name]",
@@ -63,7 +83,18 @@ for (const m of modules) {
   parts.push(m.source.replace(/\s+$/, ""));
   parts.push("end", "");
 }
-parts.push(`return require(${JSON.stringify(ENTRY)})(__SSI_VERSION)`, "");
+// A failed load is reported (when tracking is on) and then raised to the loader as before.
+parts.push(
+  "local __ok, __saveinstance = pcall(function()",
+  `\treturn require(${JSON.stringify(ENTRY)})(__SSI_VERSION, ${tracked ? "ops" : "nil"})`,
+  "end)",
+  "if not __ok then",
+  ...(tracked ? ["\tpcall(function()", '\t\tops.ready(false, "load_error")', '\t\tops.error(__saveinstance, "load")', "\tend)"] : []),
+  "\terror(__saveinstance, 0)",
+  "end",
+  "return __saveinstance",
+  ""
+);
 
 const bundle = parts.join("\n");
 writeFileSync(OUT, bundle);
