@@ -314,6 +314,7 @@ local function filteredNilInstances(own)
 		return list
 	end
 	for _, instance in instances do
+		Util.step()
 		if typeof(instance) == "Instance" and instance ~= game and not own[instance] then
 			local info = Schema.classInfo(instance.ClassName)
 			if info.saveable and not info.service then
@@ -420,6 +421,22 @@ function Collect.build(options)
 		end
 	end
 	rules.only = holdsScripts
+	if holdsScripts then
+		for i = #job.roots, 1, -1 do
+			if not holdsScripts[job.roots[i]] then
+				table.remove(job.roots, i)
+			end
+		end
+		for _, extra in job.extras do
+			local kept = {}
+			for _, instance in extra.contents do
+				if holdsScripts[instance] then
+					table.insert(kept, instance)
+				end
+			end
+			extra.contents = kept
+		end
+	end
 	return job
 end
 
@@ -1661,6 +1678,9 @@ function Options.resolve(first, second)
 	end
 
 	options.Mode = string.lower(tostring(options.Mode))
+	if options.Mode == "script" then
+		options.Mode = "scripts"
+	end
 	local timeout = tonumber(options.DecompileTimeout)
 	options.DecompileTimeout = timeout and (timeout <= 0 and math.huge or timeout) or false
 	return options

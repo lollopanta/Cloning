@@ -19,7 +19,7 @@ saveinstance(workspace.Castle, { FilePath = "Castle" }) -- instance + options
 
 | Option | Default | What it does |
 |---|---|---|
-| `Mode` | `"optimized"` | `"optimized"` saves the services a place needs. `"full"` saves every saveable service. `"scripts"` keeps only branches that contain scripts. |
+| `Mode` | `"optimized"` | `"optimized"` saves the services a place needs. `"full"` saves every saveable service. `"scripts"` keeps only branches that contain scripts (`"script"` is an alias). |
 | `Object` | `false` | An instance or list of instances to save as a model (`.rbxmx`). A service is saved as a folder. `Object = game` is the same as `Mode = "full"`. |
 | `IsModel` | automatic | `true` when `Object` is set. Set `false` to save `Object` as a place. |
 | `IgnoreList` | `{ "CoreGui", "CorePackages" }` | Leave out instances and everything under them. Entries: an instance, a class name, or `ClassName = { "Name", ... }`. `[instance] = false` keeps the instance but drops its children. |

@@ -168,6 +168,9 @@ function Options.resolve(first, second)
 	end
 
 	options.Mode = string.lower(tostring(options.Mode))
+	if options.Mode == "script" then
+		options.Mode = "scripts"
+	end
 	local timeout = tonumber(options.DecompileTimeout)
 	options.DecompileTimeout = timeout and (timeout <= 0 and math.huge or timeout) or false
 	return options

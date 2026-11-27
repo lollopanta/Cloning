@@ -38,6 +38,13 @@ node tools/bundle.mjs
 
 Bump `version.json` for releases; the bundle header and the status panel show it.
 
+Run the collection regression checks locally with `lune run tools/test-collect.luau`.
+
+If Xeno closes Roblox before the status panel appears, copy the rebuilt bundle to
+`ssi-dev/saveinstance.luau` in its workspace and run `examples/diagnose-xeno.luau`.
+The last line in `ssi-dev/startup.log` distinguishes compilation, initialization,
+and the start of the save. A native crash cannot be caught by Lua's `pcall`.
+
 ## Update the property snapshot
 
 After a Roblox update:
