@@ -303,25 +303,33 @@ function Collect.rules(options)
 	return rules
 end
 
-local function filteredNilInstances(own)
+local function filteredNilInstances(own, rules)
 	local list = {}
 	if not Env.getnilinstances then
 		Log.warn("NilInstances: this executor has no getnilinstances()")
 		return list
 	end
+	Log.checkpoint("Calling getnilinstances")
 	local ok, instances = pcall(Env.getnilinstances)
+	Log.checkpoint("getnilinstances returned", ok, type(instances))
 	if not ok or type(instances) ~= "table" then
+		Log.warn("NilInstances: getnilinstances() failed or returned a non-table")
 		return list
 	end
-	for _, instance in instances do
+	local seen = {}
+	for index, instance in instances do
 		Util.step()
-		if typeof(instance) == "Instance" and instance ~= game and not own[instance] then
+		Log.checkpoint("Filtering nil instance", index)
+		if typeof(instance) == "Instance" and instance ~= game and not own[instance]
+			and not seen[instance] and instance.Parent == nil then
+			seen[instance] = true
 			local info = Schema.classInfo(instance.ClassName)
-			if info.saveable and not info.service then
+			if info.saveable and not info.service and not rules.skip(instance, instance.ClassName) then
 				table.insert(list, instance)
 			end
 		end
 	end
+	Log.checkpoint("Filtered nil instances", #list)
 	return list
 end
 
@@ -374,7 +382,7 @@ function Collect.build(options)
 			table.insert(job.extras, { name = "Extra Instances", contents = options.ExtraInstances, folderize = true })
 		end
 		if options.NilInstances then
-			table.insert(job.extras, { name = "Nil Instances", contents = filteredNilInstances(Schema.ownInstances()), folderize = false })
+			table.insert(job.extras, { name = "Nil Instances", contents = filteredNilInstances(Schema.ownInstances(), rules), folderize = false })
 		end
 	end
 
@@ -416,6 +424,7 @@ function Collect.build(options)
 	for _, extra in job.extras do
 		for _, instance in extra.contents do
 			if typeof(instance) == "Instance" then
+				Log.checkpoint("Collecting extra tree", extra.name, instance.ClassName)
 				walk(instance, 0, extra.folderize, false)
 			end
 		end
@@ -1080,6 +1089,7 @@ end
 
 __modules["log"] = function()
 -- Console output, warnings, and the optional debug log file.
+local Env = require("env")
 local Log = {}
 
 local PREFIX = "[SaveInstance] "
@@ -1111,6 +1121,20 @@ end
 
 function Log.setDebug(enabled)
 	debugEnabled = enabled == true
+end
+
+-- Write before risky native calls: a process crash never reaches the final debug flush.
+function Log.checkpoint(...)
+	if not debugEnabled or not Env.writefile then
+		return
+	end
+	local message = join(...)
+	pcall(function()
+		if Env.makefolder and Env.isfolder and not Env.isfolder("SaveInstance420") then
+			Env.makefolder("SaveInstance420")
+		end
+		Env.writefile("SaveInstance420/last-operation.log", message)
+	end)
 end
 
 function Log.debug(...)
@@ -1296,6 +1320,7 @@ return function(version, ops)
 		Schema.reset(options)
 
 		local function report(phase, done, total, detail)
+			Log.checkpoint(phase, done or 0, total or 0)
 			status.phase, status.done, status.total = phase, done or 0, total or 0
 			status.elapsed = os.clock() - started
 			if ui then
@@ -2035,6 +2060,7 @@ end
 local function hiddenStrategy(name)
 	local gethiddenproperty = Env.gethiddenproperty
 	return function(instance)
+		Log.checkpoint("gethiddenproperty", instance.ClassName, name)
 		local ok, value = pcall(gethiddenproperty, instance, name)
 		return ok, value
 	end
@@ -2057,6 +2083,7 @@ local function ugcStrategy(name)
 			end
 			UGCValidationService = service
 		end
+		Log.checkpoint("UGCValidationService.GetPropertyValue", instance.ClassName, name)
 		local ok, value = pcall(UGCValidationService.GetPropertyValue, UGCValidationService, instance, name)
 		if ok and value ~= nil then -- this API returns nil for anything it cannot read
 			return true, value

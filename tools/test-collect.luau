@@ -22,7 +22,7 @@ instance("Part", "NestedNilPart", nilBranch)
 local extra = { nilPart, nilScript }
 local steps = 0
 local modules = {
-	log = { warn = function() end },
+	log = { warn = function() end, checkpoint = function() end },
 	quirks = { defaultPlayerScripts = {} },
 	util = { step = function() steps += 1 end },
 	env = { getnilinstances = function() return { nilPart, nilScript, nilBranch } end },
@@ -69,6 +69,33 @@ assert(#full.rules.children(workspace) == 2)
 options.Mode, options.Object, options.IsModel = "scripts", nilPart, true
 assert(Collect.build(options).roots[1] == nilPart, "explicit objects override scripts filtering")
 
+options = Options.resolve({ NilInstances = true, IgnoreList = { nilPart } })
+modules.env.getnilinstances = function() return { nilPart, nilScript, nilScript, script, "invalid" } end
+local filtered = Collect.build(options).extras[1].contents
+assert(#filtered == 1 and filtered[1] == nilScript, "filter ignored, duplicate, parented and invalid nil entries")
+modules.schema.ownInstances = function() return { [nilScript] = true } end
+assert(#Collect.build(options).extras[1].contents == 0, "exclude saver-owned nil instances")
+modules.env.getnilinstances = function() error("native failure") end
+assert(#Collect.build(options).extras[1].contents == 0, "handle getnilinstances Lua errors")
+modules.env.getnilinstances = function() return false end
+assert(#Collect.build(options).extras[1].contents == 0, "handle invalid getnilinstances results")
+
+local writes, folder = {}, false
+modules.env.isfolder = function() return folder end
+modules.env.makefolder = function() folder = true end
+modules.env.writefile = function(path, message) writes[path] = message end
+local Log = load("log")
+Log.begin(false)
+Log.checkpoint("disabled")
+assert(next(writes) == nil, "disabled debug must not write checkpoints")
+Log.setDebug(true)
+Log.checkpoint("Calling getnilinstances")
+assert(folder and writes["SaveInstance420/last-operation.log"] == "Calling getnilinstances")
+Log.checkpoint("getnilinstances returned", true, "table")
+assert(writes["SaveInstance420/last-operation.log"] == "getnilinstances returned true table")
+modules.env.writefile = function() error("disk unavailable") end
+assert(pcall(Log.checkpoint, "failure"), "diagnostic writes must not break a save")
+
 -- Also compile the generated bundle without running executor APIs.
 luau.load(fs.readFile("saveinstance.luau"))
 local diagnostic = fs.readFile("examples/diagnose-xeno.luau")
@@ -87,7 +114,7 @@ for _, failure in { "none", "compile", "initialize", "save" } do
 			return function()
 				if failure == "initialize" then error("initialize error") end
 				return function(opts)
-					assert(opts.Mode == "script" and opts.NilInstances and not opts.Decompile)
+					assert(opts.Mode == "optimized" and opts.NilInstances and not opts.Decompile)
 					if failure == "save" then error("save error") end
 					return { ok = true }
 				end
@@ -101,3 +128,4 @@ for _, failure in { "none", "compile", "initialize", "save" } do
 end
 print("PASS: script alias, script-only roots and nil trees, yielding, caller data, object mode, bundle syntax")
 print("PASS: diagnostic success, compile failure, initialization failure, save failure")
+print("PASS: nil-instance validation and durable native-call checkpoints")

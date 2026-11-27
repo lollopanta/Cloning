@@ -1,4 +1,5 @@
 -- Console output, warnings, and the optional debug log file.
+local Env = require("env")
 local Log = {}
 
 local PREFIX = "[SaveInstance] "
@@ -30,6 +31,20 @@ end
 
 function Log.setDebug(enabled)
 	debugEnabled = enabled == true
+end
+
+-- Write before risky native calls: a process crash never reaches the final debug flush.
+function Log.checkpoint(...)
+	if not debugEnabled or not Env.writefile then
+		return
+	end
+	local message = join(...)
+	pcall(function()
+		if Env.makefolder and Env.isfolder and not Env.isfolder("SaveInstance420") then
+			Env.makefolder("SaveInstance420")
+		end
+		Env.writefile("SaveInstance420/last-operation.log", message)
+	end)
 end
 
 function Log.debug(...)

@@ -5,7 +5,6 @@ local history = ""
 local function stage(message)
 	history ..= message .. "\n"
 	writefile("ssi-dev/startup.log", history)
-	print("[SaveInstance diagnostic] " .. message)
 end
 
 stage("Reading local patched bundle")
@@ -21,7 +20,7 @@ local ok, result = pcall(function()
 	local saveinstance = loader()
 	stage("Starting save (options, thread identity, then UI)")
 	return saveinstance({
-		Mode = "script",
+		Mode = "optimized",
 		NilInstances = true,
 		RemovePlayerCharacters = true,
 		IsolateLocalPlayer = false,

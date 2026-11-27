@@ -180,6 +180,7 @@ end
 local function hiddenStrategy(name)
 	local gethiddenproperty = Env.gethiddenproperty
 	return function(instance)
+		Log.checkpoint("gethiddenproperty", instance.ClassName, name)
 		local ok, value = pcall(gethiddenproperty, instance, name)
 		return ok, value
 	end
@@ -202,6 +203,7 @@ local function ugcStrategy(name)
 			end
 			UGCValidationService = service
 		end
+		Log.checkpoint("UGCValidationService.GetPropertyValue", instance.ClassName, name)
 		local ok, value = pcall(UGCValidationService.GetPropertyValue, UGCValidationService, instance, name)
 		if ok and value ~= nil then -- this API returns nil for anything it cannot read
 			return true, value

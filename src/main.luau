@@ -138,6 +138,7 @@ return function(version, ops)
 		Schema.reset(options)
 
 		local function report(phase, done, total, detail)
+			Log.checkpoint(phase, done or 0, total or 0)
 			status.phase, status.done, status.total = phase, done or 0, total or 0
 			status.elapsed = os.clock() - started
 			if ui then

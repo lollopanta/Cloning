@@ -44,6 +44,9 @@ If Xeno closes Roblox before the status panel appears, copy the rebuilt bundle t
 `ssi-dev/saveinstance.luau` in its workspace and run `examples/diagnose-xeno.luau`.
 The last line in `ssi-dev/startup.log` distinguishes compilation, initialization,
 and the start of the save. A native crash cannot be caught by Lua's `pcall`.
+With `Debug = true`, `SaveInstance420/last-operation.log` is overwritten before
+nil-instance enumeration and hidden-property native calls, so it survives a
+process crash. This adds synchronous disk writes; turn debug off after diagnosis.
 
 ## Update the property snapshot
 
