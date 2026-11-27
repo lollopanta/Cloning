@@ -94,10 +94,11 @@ function Serialize.run(job, writer, options, version, onProgress)
 	-- Instances --------------------------------------------------------------------------
 	local function writeProperties(instance, className, isScript, decompileIgnored)
 		local entries = plan(className)
+		local writtenContent = {}
 		for i = 1, #entries do
 			local entry = entries[i]
 			local name = entry.name
-			if entry.dead or ignoredProperties[name] then
+			if entry.dead or ignoredProperties[name] or (entry.content and writtenContent[entry.content]) then
 				continue
 			end
 			if isScript and name == "Source" then
@@ -111,6 +112,9 @@ function Serialize.run(job, writer, options, version, onProgress)
 			local xml = entry.encode(value, ctx)
 			if xml ~= nil then
 				push(entry.open .. xml .. entry.close)
+				if entry.type == "Content" then
+					writtenContent[name] = true
+				end
 			end
 		end
 	end

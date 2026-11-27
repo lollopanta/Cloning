@@ -307,6 +307,29 @@ function Schema.plan(className)
 		current = superclassOf(current)
 	end
 
+	local byName = {}
+	for _, entry in plan do
+		byName[entry.name] = entry
+	end
+	for _, entry in plan do
+		if entry.type == "Content" and string.sub(entry.name, -7) == "Content" then
+			local stem = string.sub(entry.name, 1, -8)
+			local names = { stem, stem .. "Id", stem .. "ID" }
+			for _, name in Quirks.contentAliases[entry.name] or {} do
+				table.insert(names, name)
+			end
+			for _, name in names do
+				local legacy = byName[name]
+				if legacy and (legacy.type == "ContentId" or legacy.type == "int64" or legacy.type == "string") then
+					legacy.content = entry.name
+				end
+			end
+		end
+	end
+	table.sort(plan, function(a, b)
+		return a.type == "Content" and b.type ~= "Content"
+	end)
+
 	for _, entry in plan do
 		entry.open, entry.close = Encode.tags(entry.type, entry.name)
 		entry.encode = Encode.encoders[entry.type]

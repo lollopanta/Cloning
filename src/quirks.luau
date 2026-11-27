@@ -12,6 +12,20 @@ Quirks.blocked = {
 	ScriptGuid = true,
 }
 
+-- Exceptions to Foo/FooId/FooID -> FooContent; the modern property is saved first.
+Quirks.contentAliases = {
+	AudioContent = { "SoundId", "Asset" },
+	VideoContent = { "Asset" },
+	TextureContent = { "Graphic" },
+	SkyboxBackContent = { "SkyboxBk" },
+	SkyboxDownContent = { "SkyboxDn" },
+	SkyboxFrontContent = { "SkyboxFt" },
+	SkyboxLeftContent = { "SkyboxLf" },
+	SkyboxRightContent = { "SkyboxRt" },
+	HSRContent = { "HSRAssetId" },
+	TemporaryReferenceMeshContent = { "TemporaryReferenceId" },
+}
+
 -- Hidden serialized members with a scriptable twin that holds the same value. Reading the
 -- twin is much faster than gethiddenproperty and works on every executor.
 -- Keyed by the class that declares the member.

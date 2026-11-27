@@ -1729,6 +1729,20 @@ Quirks.blocked = {
 	ScriptGuid = true,
 }
 
+-- Exceptions to Foo/FooId/FooID -> FooContent; the modern property is saved first.
+Quirks.contentAliases = {
+	AudioContent = { "SoundId", "Asset" },
+	VideoContent = { "Asset" },
+	TextureContent = { "Graphic" },
+	SkyboxBackContent = { "SkyboxBk" },
+	SkyboxDownContent = { "SkyboxDn" },
+	SkyboxFrontContent = { "SkyboxFt" },
+	SkyboxLeftContent = { "SkyboxLf" },
+	SkyboxRightContent = { "SkyboxRt" },
+	HSRContent = { "HSRAssetId" },
+	TemporaryReferenceMeshContent = { "TemporaryReferenceId" },
+}
+
 -- Hidden serialized members with a scriptable twin that holds the same value. Reading the
 -- twin is much faster than gethiddenproperty and works on every executor.
 -- Keyed by the class that declares the member.
@@ -2186,6 +2200,29 @@ function Schema.plan(className)
 		end
 		current = superclassOf(current)
 	end
+
+	local byName = {}
+	for _, entry in plan do
+		byName[entry.name] = entry
+	end
+	for _, entry in plan do
+		if entry.type == "Content" and string.sub(entry.name, -7) == "Content" then
+			local stem = string.sub(entry.name, 1, -8)
+			local names = { stem, stem .. "Id", stem .. "ID" }
+			for _, name in Quirks.contentAliases[entry.name] or {} do
+				table.insert(names, name)
+			end
+			for _, name in names do
+				local legacy = byName[name]
+				if legacy and (legacy.type == "ContentId" or legacy.type == "int64" or legacy.type == "string") then
+					legacy.content = entry.name
+				end
+			end
+		end
+	end
+	table.sort(plan, function(a, b)
+		return a.type == "Content" and b.type ~= "Content"
+	end)
 
 	for _, entry in plan do
 		entry.open, entry.close = Encode.tags(entry.type, entry.name)
@@ -3908,10 +3945,11 @@ function Serialize.run(job, writer, options, version, onProgress)
 	-- Instances --------------------------------------------------------------------------
 	local function writeProperties(instance, className, isScript, decompileIgnored)
 		local entries = plan(className)
+		local writtenContent = {}
 		for i = 1, #entries do
 			local entry = entries[i]
 			local name = entry.name
-			if entry.dead or ignoredProperties[name] then
+			if entry.dead or ignoredProperties[name] or (entry.content and writtenContent[entry.content]) then
 				continue
 			end
 			if isScript and name == "Source" then
@@ -3925,6 +3963,9 @@ function Serialize.run(job, writer, options, version, onProgress)
 			local xml = entry.encode(value, ctx)
 			if xml ~= nil then
 				push(entry.open .. xml .. entry.close)
+				if entry.type == "Content" then
+					writtenContent[name] = true
+				end
 			end
 		end
 	end

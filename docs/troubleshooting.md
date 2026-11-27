@@ -18,6 +18,7 @@ a native process crash. Disable `NilInstances` to avoid that call while investig
 | Symptom | Try |
 |---|---|
 | `[SaveInstance] save failed: ...` in the console | The message names the stage. Send it with the debug log. |
+| Studio reports `Content property conflict` | Re-export with the updated bundle, which writes the modern Content property first and only uses its legacy counterpart as a fallback. To repair an existing XML save, run `python tools/repair-content.py "path/to/save.rbxlx"`; it writes a separate ` - fixed` copy and preserves the original. |
 | It sits on "Decompiling scripts" | A remote `decompile()` hook may be rate-limiting: lower `DecompileConcurrency` (for example 4). Or skip it: `Decompile = false`. |
 | The game stutters a lot while saving | Lower `YieldBudget` (for example 4). |
 | The executor crashes | Try `IgnoreSpecialProperties = true` (no `gethiddenproperty` calls), then `IgnoreSharedStrings = true`. Each removes some data from the save. |

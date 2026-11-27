@@ -39,6 +39,8 @@ node tools/bundle.mjs
 Bump `version.json` for releases; the bundle header and the status panel show it.
 
 Run the collection regression checks locally with `lune run tools/test-collect.luau`.
+Run Content serialization checks with `lune run tools/test-content.luau` and
+`python tools/test_content.py`.
 
 If Xeno closes Roblox before the status panel appears, copy the rebuilt bundle to
 `ssi-dev/saveinstance.luau` in its workspace and run `examples/diagnose-xeno.luau`.

@@ -4,7 +4,7 @@ usage: python tools/validate.py <file> [--classes N]
 
 Checks: well-formed XML, <roblox version="4"> root, unique referents, every <Ref> resolves
 (or is "null"), every SharedString/NetAssetRef key is defined in <SharedStrings>, no
-duplicate property names in one <Properties>, base64 payloads decode. Prints a census of
+duplicate property names or legacy/Content pairs in one <Properties>, base64 payloads decode. Prints a census of
 classes, value types and a few properties worth eyeballing (part colors/sizes, scripts).
 """
 import base64
@@ -12,6 +12,34 @@ import binascii
 import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
+
+
+# Exceptions to the Foo/FooId/FooID -> FooContent migration naming pattern.
+CONTENT_ALIASES = {
+    "AudioContent": ("SoundId", "Asset"),
+    "VideoContent": ("Asset",),
+    "TextureContent": ("Graphic",),
+    "SkyboxBackContent": ("SkyboxBk",),
+    "SkyboxDownContent": ("SkyboxDn",),
+    "SkyboxFrontContent": ("SkyboxFt",),
+    "SkyboxLeftContent": ("SkyboxLf",),
+    "SkyboxRightContent": ("SkyboxRt",),
+    "HSRContent": ("HSRAssetId",),
+    "TemporaryReferenceMeshContent": ("TemporaryReferenceId",),
+}
+
+
+def content_pairs(props):
+    by_name = {p.get("name"): p for p in props}
+    for modern in props:
+        name = modern.get("name", "")
+        if modern.tag != "Content" or not name.endswith("Content"):
+            continue
+        stem = name[:-7]
+        for candidate in (stem, stem + "Id", stem + "ID", *CONTENT_ALIASES.get(name, ())):
+            legacy = by_name.get(candidate)
+            if legacy is not None and legacy.tag in ("Content", "ContentId", "int64", "string"):
+                yield legacy, modern
 
 
 def main(path, top_classes=15):
@@ -25,6 +53,7 @@ def main(path, top_classes=15):
     type_counts = Counter()
     prop_counts = Counter()
     duplicate_props = []
+    content_conflicts = []
     bad_base64 = []
     sources = {"total": 0, "decompiled": 0, "server": 0, "empty": 0, "other": 0}
     root_tag = None
@@ -47,6 +76,8 @@ def main(path, top_classes=15):
             class_counts[elem.attrib.get("class")] += 1
             props = elem.find("Properties")
             if props is not None:
+                content_conflicts.extend((elem.get("class"), old.get("name"), new.get("name"))
+                                         for old, new in content_pairs(props))
                 seen = set()
                 for prop in props:
                     name = prop.attrib.get("name")
@@ -100,6 +131,8 @@ def main(path, top_classes=15):
         problems.append(f"{len(duplicate_props)} duplicate properties, e.g. {duplicate_props[:3]}")
     if bad_base64:
         problems.append(f"{len(bad_base64)} invalid base64 payloads, e.g. {bad_base64[:3]}")
+    if content_conflicts:
+        problems.append(f"{len(content_conflicts)} legacy/Content property pairs, e.g. {content_conflicts[:3]}")
 
     print(f"file: {path}")
     print(f"items: {items}  referents: {len(referents)}  refs: {len(refs)}  shared strings: {len(shared_defs)} "
